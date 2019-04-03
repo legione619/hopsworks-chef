@@ -1,0 +1,26 @@
+dependencies:
+  - recipe: hopsworks::install
+    local:
+      - hops::install
+  - recipe: hopsworks::default
+    local:
+      - conda::default
+    global:
+      - hops::ndb
+      - hive2::db
+      - airflow::db
+  - recipe: hopsworks::dev
+    global:
+      - hopsworks::default
+  - recipe: hopsworks::image
+    global:
+      - hopsworks::dev
+  - recipe: hopsworks::hopssite
+    global:
+      - hopsworks::default
+  - recipe: hopsworks::delaregister
+    global:
+      - hopsworks::default
+  - recipe: hopsworks::migrate
+    global:
+      - hopsworks::default
