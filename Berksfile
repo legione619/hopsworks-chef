@@ -22,7 +22,7 @@ cookbook 'hopslog', github: "giabbo79/hopslog-chef", branch: "master"
 cookbook 'hopsmonitor', github: "giabbo79/hopsmonitor-chef", branch: "master"
 cookbook 'glassfish', github: "giabbo79/chef-glassfish", branch: "master"
 cookbook 'hive2', github: "giabbo79/hive-chef", branch: "master"
-cookbook 'hops_airflow', github: "giabbo79/hops_airflow-chef", branch: "master"
+cookbook 'hops_airflow', github: "giabbo79/airflow-chef", branch: "master"
 
 cookbook 'ulimit', github: "giabbo79/chef-ulimit", branch: "master"
 cookbook 'java'
