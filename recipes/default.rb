@@ -769,7 +769,7 @@ hopsworks_mail "gmail" do
    action :jndi
 end
 
-node.override['glassfish']['asadmin']['timeout'] = 400
+node.override['glassfish']['asadmin']['timeout'] = 3600
 
 
 glassfish_deployable "hopsworks-ear" do
