@@ -405,6 +405,22 @@ cookbook_file"#{theDomain}/docroot/obama-smoked-us.gif" do
   action :create_if_missing
 end
 
+cookbook_file"#{theDomain}/docroot/img/giotto-big.png" do
+  source 'giotto-big.png'
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0755'
+  action :create_if_missing
+end
+
+cookbook_file"#{theDomain}/docroot/img/giotto-favi.png" do
+  source 'giotto-favi.png'
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0755'
+  action :create_if_missing
+end
+
 case node['platform']
  when 'debian', 'ubuntu'
  if node['glassfish']['port'] == 80
