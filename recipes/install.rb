@@ -3,16 +3,24 @@ require 'base64'
 require 'digest'
 
 my_ip = my_private_ip()
-username=node['hopsworks']['admin']['user']
-password=node['hopsworks']['admin']['password']
 domain_name="domain1"
 domains_dir = node['hopsworks']['domains_dir']
 theDomain="#{domains_dir}/#{domain_name}"
-admin_port = node['glassfish']['admin']['port']
-web_port = node['glassfish']['port']
 mysql_user=node['mysql']['user']
 mysql_password=node['mysql']['password']
 password_file = "#{theDomain}_admin_passwd"
+
+featurestore_user=node['featurestore']['user']
+featurestore_password=node['featurestore']['password']
+
+mysql_host = private_recipe_ip("ndb","mysqld")
+featurestore_jdbc_url = node['featurestore']['jdbc_url']
+# In case of an upgrade, attribute-driven-domain will not run but we still need to configure
+# connection pool for the online featurestore
+if node['featurestore']['jdbc_url'].eql? "localhost"
+  featurestore_jdbc_url="jdbc:mysql://#{mysql_host}:#{node['ndb']['mysql_port']}/"
+end
+
 
 bash "systemd_reload_for_glassfish_failures" do
   user "root"
@@ -23,34 +31,6 @@ bash "systemd_reload_for_glassfish_failures" do
   EOF
 end
 
-
-case node['platform_family']
-when "redhat"
-  if node['glassfish']['port'] == 80
-    bash "authbind-centos" do
-      user "root"
-      code <<-EOF
-         cd #{Chef::Config['file_cache_path']}
-         rm -f authbind_2.1.1.tar.gz
-         wget #{node['download_url']}/authbind_2.1.1.tar.gz
-         tar authbind_2.1.1.tar.gz
-         cd authbind-2.1.1
-         make
-         make install
-         ln -s /usr/local/bin/authbind /usr/bin/authbind
-         mkdir -p /etc/authbind/byport
-         touch /etc/authbind/byport/80
-         chmod 550 /etc/authbind/byport/80
-         touch /etc/authbind/byport/443
-         chmod 550 /etc/authbind/byport/443
-     EOF
-       not_if { ::File.exists?("/usr/bin/authbind") }
-    end
-  end
-end
-
-
-
 if node['hopsworks']['systemd'] == "true"
   systemd = true
 else
@@ -60,16 +40,19 @@ end
 group node['hopsworks']['group'] do
   action :create
   not_if "getent group #{node['hopsworks']['group']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 group node['jupyter']['group'] do
   action :create
   not_if "getent group #{node['jupyter']['group']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
-group node['tfserving']['group'] do
+group node['serving']['group'] do
   action :create
-  not_if "getent group #{node['tfserving']['group']}"
+  not_if "getent group #{node['serving']['group']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 #
@@ -78,6 +61,7 @@ end
 group node['hops']['hdfs']['user'] do
   action :create
   not_if "getent group #{node['hops']['hdfs']['user']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 user node['hopsworks']['user'] do
@@ -87,29 +71,35 @@ user node['hopsworks']['user'] do
   shell "/bin/bash"
   manage_home true
   not_if "getent passwd #{node['hopsworks']['user']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 group node['jupyter']['group'] do
   action :modify
   members ["#{node['hopsworks']['user']}"]
   append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
-group node['tfserving']['group'] do
+group node['serving']['group'] do
   action :modify
   members ["#{node['hopsworks']['user']}"]
   append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
+
 group node['jupyter']['group'] do
   action :modify
   members ["#{node['hopsworks']['user']}"]
   append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 group node['conda']['group'] do
   action :modify
   members ["#{node['hopsworks']['user']}"]
   append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 # Add to the hdfs superuser group
@@ -117,6 +107,7 @@ group node['hops']['hdfs']['user'] do
   action :modify
   members ["#{node['hopsworks']['user']}"]
   append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 user node['jupyter']['user'] do
@@ -126,26 +117,30 @@ user node['jupyter']['user'] do
   shell "/bin/bash"
   manage_home true
   not_if "getent passwd #{node['jupyter']['user']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
-user node['tfserving']['user'] do
-  gid node['tfserving']['group']
+user node['serving']['user'] do
+  gid node['serving']['group']
   action :create
   shell "/bin/bash"
   manage_home true
-  not_if "getent passwd #{node['tfserving']['user']}"
+  not_if "getent passwd #{node['serving']['user']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 group node['kagent']['certs_group'] do
   action :modify
   members ["#{node['hopsworks']['user']}"]
   append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 group node['hops']['group'] do
   action :modify
-  members ["#{node['hopsworks']['user']}", "#{node['jupyter']['user']}"]
+  members ["#{node['hopsworks']['user']}", "#{node['jupyter']['user']}", "#{node['serving']['user']}"]
   append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 #update permissions of base_dir to 770
@@ -181,17 +176,16 @@ when "debian"
   if node['platform_version'].to_f <= 14.04
     node.override['hopsworks']['systemd'] = "false"
   end
-  package "dtrx"
-  package "libkrb5-dev"
+  package ["dtrx", "libkrb5-dev"]
+
   dtrx="dtrx"
 when "rhel"
-  package "krb5-libs"
-  package "p7zip"
+  package ["krb5-libs", "p7zip"]
 
   remote_file "#{Chef::Config['file_cache_path']}/dtrx.tar.gz" do
     user node['glassfish']['user']
     group node['glassfish']['group']
-    source node['download_url'] + "/#{node['dtrx']['version']}"
+    source node['dtrx']['download_url']
     mode 0755
     action :create
   end
@@ -199,18 +193,51 @@ when "rhel"
   bash "unpack_dtrx" do
     user "root"
     code <<-EOF
-    set -e
-    cd #{Chef::Config['file_cache_path']}
-    tar -xzf dtrx.tar.gz
-    cd dtrx-7.1
-    python setup.py install --prefix=/usr/local
-    # dtrx expects 7z to on its path. create a symbolic link from /bin/7z to /bin/7za
-    rm -f /bin/7z
-    ln -s /bin/7za /bin/7z
-  EOF
+      set -e
+      cd #{Chef::Config['file_cache_path']}
+      tar -xzf dtrx.tar.gz
+      cd dtrx-7.1
+      python setup.py install --prefix=/usr/local
+      # dtrx expects 7z to on its path. create a symbolic link from /bin/7z to /bin/7za
+      rm -f /bin/7z
+      ln -s /bin/7za /bin/7z
+    EOF
     not_if "which dtrx"
   end
   dtrx="/usr/local/bin/dtrx"
+end
+
+# Install authbind to allow glassfish to bind on ports < 1024
+case node['platform_family']
+when "debian"
+  package "authbind"
+when "rhel"
+  authbind_rpm = ::File.basename(node['authbind']['download_url'])
+
+  remote_file "#{Chef::Config['file_cache_path']}/#{authbind_rpm}" do
+    user node['glassfish']['user']
+    group node['glassfish']['group']
+    source node['authbind']['download_url']
+    mode 0755
+    action :create
+  end
+
+  package 'authbind' do
+    source "#{Chef::Config['file_cache_path']}/#{authbind_rpm}"
+  end
+end
+
+# Configure authbind ports
+authbind_port "Authbind Glassfish Admin port" do
+  port node['hopsworks']['admin']['port'].to_i
+  user node['glassfish']['user']
+  only_if {node['hopsworks']['admin']['port'].to_i < 1024}
+end
+
+authbind_port "Authbind Glassfish https port" do
+  port node['hopsworks']['https']['port'].to_i
+  user node['glassfish']['user']
+  only_if {node['hopsworks']['https']['port'].to_i < 1024}
 end
 
 file "#{node['hopsworks']['env_var_file']}" do
@@ -228,6 +255,7 @@ node.override = {
   },
   'glassfish' => {
     'version' => node['glassfish']['version'],
+    'domains_dir' => node['hopsworks']['domains_dir'],
     'domains' => {
       domain_name => {
         'config' => {
@@ -237,10 +265,11 @@ node.override = {
           'max_memory' => node['glassfish']['max_mem'],
           'max_perm_size' => node['glassfish']['max_perm_size'],
           'max_stack_size' => node['glassfish']['max_stack_size'],
-          'port' => web_port,
-          'admin_port' => admin_port,
-          'username' => username,
-          'password' => password,
+          'port' => 8080, #This is hardcoded as it's not used. Http listener is disabled in hopsworks::default.
+          'https_port' => node['hopsworks']['https']['port'].to_i,
+          'admin_port' => node['hopsworks']['admin']['port'].to_i,
+          'username' => node['hopsworks']['admin']['user'],
+          'password' => node['hopsworks']['admin']['password'],
           'master_password' => node['hopsworks']['master']['password'],
           'remote_access' => false,
           'secure' => false,
@@ -314,6 +343,26 @@ node.override = {
               }
             }
           },
+          'featureStorePool' => {
+            'config' => {
+              'datasourceclassname' => 'com.mysql.jdbc.jdbc2.optional.MysqlDataSource',
+              'restype' => 'javax.sql.DataSource',
+              'isconnectvalidatereq' => 'true',
+              'validationmethod' => 'auto-commit',
+              'ping' => 'true',
+              'description' => 'FeatureStore Connection Pool',
+              'properties' => {
+                'Url' => featurestore_jdbc_url,
+                'User' => featurestore_user,
+                'Password' => featurestore_password
+              }
+            },
+            'resources' => {
+              'jdbc/featurestore' => {
+                'description' => 'Resource for Hopsworks Pool',
+              }
+            }
+          },
           'airflowPool' => {
             'config' => {
               'datasourceclassname' => 'com.mysql.jdbc.jdbc2.optional.MysqlDataSource',
@@ -365,9 +414,23 @@ node.override = {
 include_recipe 'glassfish::default'
 package 'openssl'
 
-if ::File.directory?( "#{theDomain}/lib" ) == false
+if !::File.directory?("#{theDomain}/lib")
   include_recipe 'glassfish::attribute_driven_domain'
-end
+else
+  # For older installations (Hopsworks <= 1.0.0) the paths referring to glassfish contain the glassfish version 
+  # this is problematic during upgrades. We replace them here with sed. 
+  ["glassfish-4.1.2.174", "glassfish-4.1.2.181"].each do |version|
+    bash "remove_glassfish_versions" do 
+      user "root"
+      group "root"
+      code <<-EOL
+        sed -i 's/#{version}/current/g' /lib/systemd/system/glassfish-#{domain_name}.service
+        sed -i 's/#{version}/current/g' #{theDomain}/config/domain.xml
+        sed -i 's/#{version}/current/g' #{theDomain}/bin/domain1_asadmin
+      EOL
+    end
+  end
+end 
 
 cauth = File.basename(node['hopsworks']['cauth_url'])
 
@@ -379,61 +442,21 @@ remote_file "#{theDomain}/lib/#{cauth}"  do
   action :create_if_missing
 end
 
-
-
-# If the install.rb recipe failed and is re-run, install_dir needs to reset it
-if node['glassfish']['install_dir'].include?("versions") == false
-  node.override['glassfish']['install_dir'] = "#{node['glassfish']['install_dir']}/glassfish/versions/current"
-end
-
-
 template "#{theDomain}/docroot/404.html" do
   source "404.html.erb"
   owner node['glassfish']['user']
-  mode 0777
-  variables({
-              :org_name => node['hopsworks']['org_name']
-            })
+  group node['glassfish']['group']
+  mode "444"
   action :create
 end
 
-cookbook_file"#{theDomain}/docroot/obama-smoked-us.gif" do
-  source 'obama-smoked-us.gif'
+cookbook_file"#{theDomain}/docroot/hops_icon.png" do
+  source 'hops_icon.png'
   owner node['glassfish']['user']
   group node['glassfish']['group']
   mode '0755'
   action :create_if_missing
 end
-
-cookbook_file"#{theDomain}/docroot/img/giotto-big.png" do
-  source 'giotto-big.png'
-  owner node['glassfish']['user']
-  group node['glassfish']['group']
-  mode '0755'
-  action :create_if_missing
-end
-
-cookbook_file"#{theDomain}/docroot/img/giotto-favi.png" do
-  source 'giotto-favi.png'
-  owner node['glassfish']['user']
-  group node['glassfish']['group']
-  mode '0755'
-  action :create_if_missing
-end
-
-case node['platform']
- when 'debian', 'ubuntu'
- if node['glassfish']['port'] == 80
-   authbind_port "AuthBind GlassFish Port 80" do
-     port 80
-     user node['glassfish']['user']
-   end
- end
-end
-
-
-include_recipe "hopsworks::authbind"
-
 
 if systemd == true
   directory "/etc/systemd/system/glassfish-#{domain_name}.service.d" do
@@ -543,44 +566,19 @@ template "#{ca_dir}/intermediate/openssl-intermediate.cnf" do
   action :create
 end
 
-template "#{ca_dir}/intermediate/createusercerts.sh" do
-  source "createusercerts.sh.erb"
-  owner "root"
-  group node['glassfish']['group']
-  mode "510"
-  variables({
-              :int_ca_dir =>  "#{ca_dir}/intermediate/"
-            })
-  action :create
-end
-
-template "#{ca_dir}/intermediate/deleteusercerts.sh" do
-  source "deleteusercerts.sh.erb"
-  owner "root"
-  group node['glassfish']['group']
-  mode "510"
-  variables({
-              :int_ca_dir =>  "#{ca_dir}/intermediate/"
-            })
-  action :create
-end
-
-template "#{ca_dir}/intermediate/deleteprojectcerts.sh" do
-  source "deleteprojectcerts.sh.erb"
-  owner "root"
-  group node['glassfish']['group']
-  mode "510"
-  variables({
-              :int_ca_dir =>  "#{ca_dir}/intermediate/"
-            })
-  action :create
-end
-
 template "#{theDomain}/bin/ndb_backup.sh" do
   source "ndb_backup.sh.erb"
   owner node['glassfish']['user']
   group node['glassfish']['group']
   mode "754"
+  action :create
+end
+
+template "#{theDomain}/bin/convert-ipython-notebook.sh" do
+  source "convert-ipython-notebook.sh.erb"
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode "550"
   action :create
 end
 
@@ -627,7 +625,7 @@ end
 template "#{theDomain}/bin/tfserving.sh" do
   source "tfserving.sh.erb"
   owner node['glassfish']['user']
-  group node['tfserving']['group']
+  group node['serving']['group']
   mode "550"
   action :create
 end
@@ -635,15 +633,39 @@ end
 template "#{theDomain}/bin/tfserving-kill.sh" do
   source "tfserving-kill.sh.erb"
   owner node['glassfish']['user']
-  group node['tfserving']['group']
+  group node['serving']['group']
   mode "550"
   action :create
 end
 
-template "#{theDomain}/bin/tfserving-kill.sh" do
-  source "tfserving-kill.sh.erb"
+template "#{theDomain}/bin/sklearn_flask_server.py" do
+  source "sklearn_flask_server.py.erb"
   owner node['glassfish']['user']
-  group node['tfserving']['group']
+  group node['serving']['group']
+  mode "550"
+  action :create
+end
+
+template "#{theDomain}/bin/sklearn_serving-launch.sh" do
+  source "sklearn_serving-launch.sh.erb"
+  owner node['glassfish']['user']
+  group node['serving']['group']
+  mode "550"
+  action :create
+end
+
+template "#{theDomain}/bin/sklearn_serving.sh" do
+  source "sklearn_serving.sh.erb"
+  owner node['glassfish']['user']
+  group node['serving']['group']
+  mode "550"
+  action :create
+end
+
+template "#{theDomain}/bin/sklearn_serving-kill.sh" do
+  source "sklearn_serving-kill.sh.erb"
+  owner node['glassfish']['user']
+  group node['serving']['group']
   mode "550"
   action :create
 end
@@ -672,15 +694,6 @@ template "#{theDomain}/bin/anaconda-rsync.sh" do
   action :create
 end
 
-template "#{theDomain}/bin/kagent-restart.sh" do
-  source "kagent-restart.sh.erb"
-  owner node['glassfish']['user']
-  group node['glassfish']['group']
-  mode "500"
-  action :create
-end
-
-
 command=""
 case node['platform']
  when 'debian', 'ubuntu'
@@ -693,7 +706,7 @@ end
 template "#{theDomain}/bin/tfserving-launch.sh" do
   source "tfserving-launch.sh.erb"
   owner node['glassfish']['user']
-  group node['tfserving']['group']
+  group node['serving']['group']
   mode "550"
   variables({
      :command => command
@@ -783,12 +796,10 @@ template "/etc/sudoers.d/glassfish" do
   mode "0440"
   variables({
               :user => node['glassfish']['user'],
-              :int_sh_dir =>  "#{ca_dir}/intermediate/createusercerts.sh",
-              :delete_usercert =>  "#{ca_dir}/intermediate/deleteusercerts.sh",
-              :delete_projectcert =>  "#{ca_dir}/intermediate/deleteprojectcerts.sh",
               :ndb_backup =>  "#{theDomain}/bin/ndb_backup.sh",
               :jupyter =>  "#{theDomain}/bin/jupyter.sh",
               :tfserving =>  "#{theDomain}/bin/tfserving.sh",
+              :sklearn_serving =>  "#{theDomain}/bin/sklearn_serving.sh",
               :conda_export =>  "#{theDomain}/bin/condaexport.sh",
               :tensorboard =>  "#{theDomain}/bin/tensorboard.sh",
               :jupyter_cleanup =>  "#{theDomain}/bin/jupyter-project-cleanup.sh",
@@ -797,7 +808,6 @@ template "/etc/sudoers.d/glassfish" do
               :ca_keystore => "#{theDomain}/bin/ca-keystore.sh",
               :hive_user => node['hive2']['user'],
               :anaconda_prepare => "#{theDomain}/bin/anaconda-prepare.sh",
-              :airflow_copy => "#{theDomain}/bin/airflowOps.sh",              
               :start_llap => "#{theDomain}/bin/start-llap.sh"
             })
   action :create
@@ -826,7 +836,6 @@ when "ubuntu"
 end
 
 
-
 #
 # Jupyter Configuration
 #
@@ -844,6 +853,7 @@ user node["jupyter"]["user"] do
   shell "/bin/bash"
   manage_home true
   not_if "getent passwd #{node["jupyter"]["user"]}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 #update permissions of base_dir to 770
@@ -853,15 +863,6 @@ directory node["jupyter"]["base_dir"]  do
   mode "770"
   action :create
 end
-
-bash "python_openssl" do
-  user "root"
-  code <<-EOF
-    pip install pyopenssl
-    # --upgrade
-  EOF
-end
-
 
 directory node["hopssite"]["certs_dir"] do
   owner node["glassfish"]["user"]
@@ -966,13 +967,4 @@ template "#{theDomain}/bin/conda-command-ssh.sh" do
   mode 0750
   action :create
 end
-
-template "#{theDomain}/bin/airflowOps.sh" do
-  source "airflowOps.sh.erb"
-  owner node['glassfish']['user']
-  group node['glassfish']['group']
-  mode 0710
-  action :create
-end
-
 
