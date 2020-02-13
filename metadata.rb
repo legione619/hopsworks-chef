@@ -4,8 +4,8 @@ maintainer_email "jdowling@kth.se"
 license          "Apache v2.0"
 description      "Installs/Configures HopsWorks, the UI for Hops Hadoop."
 long_description IO.read(File.join(File.dirname(__FILE__), 'README.md'))
-version          "1.0.0"
-source_url       "https://github.com/hopshadoop/hopsworks-chef"
+version          "1.2.0"
+source_url       "https://github.com/logicalclocks/hopsworks-chef"
 
 
 %w{ ubuntu debian centos rhel }.each do |os|
@@ -262,6 +262,10 @@ attribute "hopsworks/max_num_proj_per_user",
           :description => "Maximum number of projects that can be created by each user",
           :type => 'string'
 
+attribute "hopsworks/reserved_project_names",
+          :description => "Comma-separated list of Project names a user user is not allowed to use",
+          :type => 'string'
+
 attribute "hopsworks/encryption_password",
           :description => "Default master encryption password for storing secrets.",
           :type => 'string'
@@ -310,20 +314,8 @@ attribute "install/user",
           :description => "User to install the services as",
           :type => "string"
 
-attribute "install/upgrade",
-          :description => "Set to 'true' if updating the cluster. Default 'false'",
-          :type => "string"
-
 attribute "install/ssl",
           :description => "Is SSL turned on for all services?",
-          :type => "string"
-
-attribute "install/cleanup_downloads",
-          :description => "Remove any zipped binaries that were downloaded and used to install services",
-          :type => "string"
-
-attribute "install/upgrade",
-          :description => "User to upgrade the software",
           :type => "string"
 
 attribute "install/addhost",
@@ -334,6 +326,17 @@ attribute "hopsworks/monitor_max_status_poll_try",
           :description => "Default number of time the job monitor fail at polling the job status before to consider the job as failed",
           :type => 'string'
 
+attribute "hopsworks/db",
+          :description => "Default hopsworks database",
+          :type => 'string'
+
+attribute "mysql/user/kafka",
+          :description => "DB user for the Kafka service",
+          :type => 'string'
+
+attribute "mysql/password/kafka",
+          :description => "Password of the DB user for the Kafka service",
+          :type => 'string'
 
 ##
 ##
@@ -1761,7 +1764,7 @@ attribute "ldap/security_credentials",
           :type => 'string'
 
 attribute "ldap/referral",
-          :description => "LDAP used to redirect a client's request to another server . 'follow' (default) possible values ('ignore', 'follow', 'throw')",
+          :description => "LDAP used to redirect a client's request to another server . 'ignore' (default) possible values ('ignore', 'follow', 'throw')",
           :type => 'string'
 
 attribute "ldap/additional_props",
@@ -1816,6 +1819,13 @@ attribute "oauth/account_status",
           :type => 'string'
 attribute "oauth/group_mapping",
           :description => "OAuth group to hopsworks group mappings. Format: (groupA-> HOPS_USER,HOPS_ADMIN;groupB->HOPS_USER)",
+          :type => 'string'
+
+attribute "hopsworks/disable_password_login",
+          :description => "Disable password login. 'false' (default)",
+          :type => 'string'
+attribute "hopsworks/disable_registration",
+          :description => "Disable registration. 'false' (default)",
           :type => 'string'
 
 ### Kapacitor
@@ -1877,7 +1887,7 @@ attribute "hopsworks/jwt/signature_algorithm",
           :type => 'string'
 
 attribute "hopsworks/jwt/lifetime_ms",
-          :description => "Default lifetime in ms for jwt expiration. (default 1800000)",
+          :description => "Default lifetime in ms for jwt expiration. (default 1.2.000)",
           :type => 'string'
 
 attribute "hopsworks/jwt/exp_leeway_sec",
@@ -1910,6 +1920,11 @@ attribute "glassfish/http/keep_alive_timeout",
           :description => "Glassfish http listeners Keep alive timeout seconds",
           :type => 'string'
 
+# Glassfish Timer Configuration
+attribute "glassfish/reschedule_failed_timer",
+        :description => "Whether failed timers should be rescheduled to prevent them being expunged (default true)",
+        :type => 'string'
+
 # kagent liveness monitor configuration
 attribute "hopsworks/kagent_liveness/enabled",
           :description => "Enables kagent service monitoring and restart",
@@ -1936,3 +1951,38 @@ attribute "hopsworks/requests_verify",
           :description => "Whether to verify http(s) requests in hops-util-py",
           :type => 'string'
 
+attribute "hopsworks/provenance/type",
+          :description => "MIN provenance - community edition. FULL provenance - enterprise",
+          :type => 'string'
+
+attribute "hopsworks/provenance/archive/batch_size",
+          :description => "Provenance cleaning size per round. Number of cleaned indices(per project)",
+          :type => 'string'
+
+attribute "hopsworks/provenance/archive/delay",
+          :description => "Provenance archive delay. How long to delay cleanup of document after delete (currently only fo FULL provenance)",
+          :type => 'string'
+
+attribute "hopsworks/provenance/cleaner/period",
+          :description => "Provenance cleaning delay. Define in seconds the period between two provenance cleaner timeouts - default 1h",
+          :type => 'string'
+
+# Audit log
+attribute "hopsworks/audit_log_dump_enabled",
+          :description => "Audit log dump to hdfs enabled. 'false' (default)",
+          :type => 'string'
+attribute "hopsworks/audit_log_dir",
+          :description => "Audit log dir. '/srv/hops/domains/domain1/logs/audit' (default)",
+          :type => 'string'
+attribute "hopsworks/audit_log_file_format",
+          :description => "Audit log file format. 'server_audit_log%g.log' (default)",
+          :type => 'string'
+attribute "hopsworks/audit_log_size_limit",
+          :description => "Audit log size per file. '256000000' (default)",
+          :type => 'string'
+attribute "hopsworks/audit_log_count",
+          :description => "Audit file count. '10' (default)",
+          :type => 'string'
+attribute "hopsworks/audit_log_file_type",
+          :description => "Audit log file type. 'Text' (default)",
+          :type => 'string'
