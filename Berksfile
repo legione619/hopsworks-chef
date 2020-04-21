@@ -24,7 +24,7 @@ cookbook 'hops_airflow', github: "giabbo79/airflow-chef", branch: "1.0"
 cookbook 'hive2', github: "giabbo79/hive-chef", branch: "1.0"
 
 cookbook 'ulimit', github: "giabbo79/chef-ulimit", branch: "1.0"
-cookbook 'java'
+cookbook 'java', '= 7.0.0'
 
 cookbook 'graphite', '~> 1.0.4'
 cookbook 'simple-logstash', '~> 0.2.4'
