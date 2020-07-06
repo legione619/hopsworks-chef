@@ -1,8 +1,9 @@
 include_recipe "java"
+Chef::Resource.send(:include, Hops::Helpers)
 
 domain_name= node['hopsworks']['domain_name']
 domains_dir = node['hopsworks']['domains_dir']
-# This is set correctly in hopsworks::install by the chef-glassfish recipe. As each recipe has it's own 
+# This is set correctly in hopsworks::install by the chef-glassfish recipe. As each recipe has it's own
 # instance of chef we need to re-set it here.
 # If you set it in the attributes it will break glassfish installation.
 node.override['glassfish']['install_dir'] = "#{node['glassfish']['install_dir']}/glassfish/versions/current"
@@ -35,13 +36,6 @@ rescue
 end
 
 begin
-  spark_history_server_ip = private_recipe_ip("hadoop_spark","historyserver")
-rescue
-  spark_history_server_ip = node['hostname']
-  Chef::Log.warn "could not find the spark history server ip for HopsWorks!"
-end
-
-begin
   jhs_ip = private_recipe_ip("hops","jhs")
 rescue
   jhs_ip = node['hostname']
@@ -49,52 +43,10 @@ rescue
 end
 
 begin
-  rm_ip = private_recipe_ip("hops","rm")
-rescue
-  rm_ip = node['hostname']
-  Chef::Log.warn "could not find the Resource Manager ip!"
-end
-
-begin
-  rm_port = node['hops']['rm']['http_port']
-rescue
-  rm_port = 8088
-  Chef::Log.warn "could not find the Resource Manager Port!"
-end
-
-begin
-  logstash_ip = private_recipe_ip("hopslog","default")
-rescue
-  logstash_ip = node['hostname']
-  Chef::Log.warn "could not find the Logstash ip!"
-end
-
-begin
-  logstash_port = node['logstash']['http']['port']
-rescue
-  logstash_port = 3456
-  Chef::Log.warn "could not find the Logstash Port!"
-end
-
-begin
-  livy_ip = private_recipe_ip("livy","default")
-rescue
-  livy_ip = node['hostname']
-  Chef::Log.warn "could not find livy server ip!"
-end
-
-begin
   epipe_ip = private_recipe_ip("epipe","default")
 rescue
   epipe_ip = node['hostname']
   Chef::Log.warn "could not find th epipe server ip!"
-end
-
-begin
-  zk_ip = private_recipe_ip("kzookeeper","default")
-rescue
-  zk_ip = node['hostname']
-  Chef::Log.warn "could not find th zk server ip!"
 end
 
 begin
@@ -122,7 +74,7 @@ begin
   kibana_ip = private_recipe_ip("hopslog","default")
 rescue
   kibana_ip = node['hostname']
-  Chef::Log.warn "could not find the logstash server ip!"
+  Chef::Log.warn "could not find the kibana server ip!"
 end
 
 begin
@@ -132,13 +84,6 @@ rescue
   grafana_ip = node['hostname']
   influxdb_ip = node['hostname']
   Chef::Log.warn "could not find the hopsmonitor server ip!"
-end
-
-begin
-  hiveserver_ip = private_recipe_ip("hive2","default")
-rescue
-  hiveserver_ip = node['hostname']
-  Chef::Log.warn "could not find the Hive server ip!"
 end
 
 begin
@@ -157,6 +102,13 @@ bash 'create_hopsworks_db' do
   code <<-EOF
       set -e
       #{exec} -e \"CREATE DATABASE IF NOT EXISTS #{node['hopsworks']['db']} CHARACTER SET latin1\"
+      #{exec} -e \"CREATE USER IF NOT EXISTS #{node['hopsworks']['mysql']['user']} IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']}\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hopsworks']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hops']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
+      # Hopsworks needs to the quotas tables
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.yarn_projects_quota TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.hdfs_directory_with_quota_feature TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT SELECT ON metastore.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
     EOF
 end
 
@@ -190,18 +142,7 @@ dns = Resolv::DNS.new
 hosts = ""
 
 for h in node['kagent']['default']['private_ips']
-
-  # Try and resolve hostname first using /etc/hosts, then use DNS
-  begin
-    hname = hostf.getname(h)
-  rescue
-    begin
-      hname = dns.getname(h)
-    rescue
-      raise "Cannot resolve the hostname for IP address: #{h}"
-    end
-  end
-
+  hname = resolve_hostname(h)
   hosts += "('" + hname.to_s + "','" + h + "')" + ","
 end
 if h.length > 0
@@ -243,7 +184,7 @@ end
 # hops-util-py only works for localhost installations if you disable TLS hostname validations
 if node['install']['localhost'].eql? "true"
   node.override['hopsworks']['requests_verify'] = "false"
-end  
+end
 
 
 # Hive metastore should be created before the hopsworks tables are created
@@ -284,7 +225,7 @@ end
 if current_version.eql?("")
 
   # Make sure the database is actually empty. Otherwise raise an error
-  ruby_block "check_db_empty" do 
+  ruby_block "check_db_empty" do
     block do
       raise "You are trying to initialize the database, but the database is not empty. Either there is a failed migration, or you forgot to set the current_version attribute"
     end
@@ -335,13 +276,7 @@ for version in versions do
          :conda_repo => condaRepo,
          :hosts => hosts,
          :epipe_ip => epipe_ip,
-         :livy_ip => livy_ip,
          :jhs_ip => jhs_ip,
-         :rm_ip => rm_ip,
-         :rm_port => rm_port,
-         :logstash_ip => logstash_ip,
-         :logstash_port => logstash_port,
-         :spark_history_server_ip => spark_history_server_ip,
          :hopsworks_ip => hopsworks_ip,
          :elastic_ip => elastic_ips,
          :yarn_ui_ip => public_recipe_ip("hops","rm"),
@@ -353,7 +288,6 @@ for version in versions do
          :hdfs_default_quota => node['hopsworks']['hdfs_default_quota_mbs'].to_i,
          :hive_default_quota => node['hopsworks']['hive_default_quota_mbs'].to_i,
          :featurestore_default_quota => node['hopsworks']['featurestore_default_quota_mbs'].to_i,
-         :zk_ip => zk_ip,
          :java_home => node['java']['java_home'],
          :drelephant_ip => drelephant_ip,
          :kafka_ip => kafka_ip,
@@ -363,11 +297,10 @@ for version in versions do
          :influxdb_ip => influxdb_ip,
          :public_ip => public_ip,
          :dela_ip => dela_ip,
-         :hivessl_hostname => hiveserver_ip + ":#{node['hive2']['portssl']}",
-         :hiveext_hostname => hiveserver_ip + ":#{node['hive2']['port']}",
          :nonconda_hosts_list => nonconda_hosts_list,
          :krb_ldap_auth => node['ldap']['enabled'].to_s == "true" || node['kerberos']['enabled'].to_s == "true",
-         :featurestore_jdbc_url => featurestore_jdbc_url
+         :featurestore_jdbc_url => featurestore_jdbc_url,
+         :hops_version => get_hops_version(node['hops']['version'])
     })
     action :create
   end
@@ -427,11 +360,11 @@ begin
     user "root"
     code <<-EOF
       set -e
-      #{exec} -e \"CREATE USER IF NOT EXISTS #{node['hopsworks']['mysql']['user']['kafka']} IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']['kafka']}\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['hopsworks']['mysql']['user']['kafka']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['hopsworks']['mysql']['user']['kafka']}\'@\'%\'\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['hopsworks']['mysql']['user']['kafka']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['hopsworks']['mysql']['user']['kafka']}\'@\'%\';\"
+      #{exec} -e \"CREATE USER IF NOT EXISTS #{node['kkafka']['mysql']['user']} IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'%\'\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
     EOF
   end
 rescue
@@ -554,7 +487,7 @@ props =  {
  end
 
 # Enable JMX metrics
-glassfish_asadmin "set-monitoring-configuration --dynamic true --enabled true --amx true --logfrequency 15 --logfrequencyunit SECONDS" do 
+glassfish_asadmin "set-monitoring-configuration --dynamic true --enabled true --amx true --logfrequency 15 --logfrequencyunit SECONDS" do
    domain_name domain_name
    password_file "#{domains_dir}/#{domain_name}_admin_passwd"
    username username
@@ -570,10 +503,10 @@ glassfish_conf = {
   'server.http-service.virtual-server.server.property.send-error_1' => "\"code=404 path=#{domains_dir}/#{domain_name}/docroot/404.html reason=Resource_not_found\"",
   # Enable/Disable HTTP listener
   'configs.config.server-config.network-config.network-listeners.network-listener.http-listener-1.enabled' => false,
-  # Make sure the https listener is listening on the requested port 
+  # Make sure the https listener is listening on the requested port
   'configs.config.server-config.network-config.network-listeners.network-listener.http-listener-2.port' => node['hopsworks']['https']['port'],
   # Disable SSL3
-  'server.network-config.protocols.protocol.http-listener-2.ssl.ssl3-enabled' => false, 
+  'server.network-config.protocols.protocol.http-listener-2.ssl.ssl3-enabled' => false,
   'server.network-config.protocols.protocol.sec-admin-listener.ssl.ssl3-enabled' => false,
   # Disable TLS 1.0
   'server.network-config.protocols.protocol.http-listener-2.ssl.tls-enabled' => false,
@@ -603,7 +536,11 @@ glassfish_conf = {
   'configs.config.server-config.monitoring-service.module-monitoring-levels.jpa' => 'HIGH',
   'configs.config.server-config.monitoring-service.module-monitoring-levels.web-container' => 'HIGH',
   'server.network-config.protocols.protocol.http-listener-2.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout'],
-  'server.network-config.protocols.protocol.http-listener-1.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout']
+  'server.network-config.protocols.protocol.http-listener-1.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout'],
+  'resources.jdbc-connection-pool.hopsworksPool.property.User' => node['hopsworks']['mysql']['user'],
+  'resources.jdbc-connection-pool.hopsworksPool.property.Password' => node['hopsworks']['mysql']['password'],
+  'resources.jdbc-connection-pool.ejbTimerPool.property.User' => node['hopsworks']['mysql']['user'],
+  'resources.jdbc-connection-pool.ejbTimerPool.property.Password' => node['hopsworks']['mysql']['password']
 }
 
 glassfish_conf.each do |property, value|
@@ -672,8 +609,8 @@ logging_conf = {
   'com.sun.enterprise.server.logging.GFFileHandler.logtoFile' => true,
   'com.sun.enterprise.server.logging.GFFileHandler.rotationLimitInBytes' => node['hopsworks']['logsize'],
   # These are just some random number, we are not enabling this logger. However if they are not set
-  # the main logger doesn't work either. 
-  'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.rotationLimitInBytes' => 2000000,  
+  # the main logger doesn't work either.
+  'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.rotationLimitInBytes' => 2000000,
   'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.rotationTimelimitInMinutes' => 0,
   'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.maxHistoryFiles' => 3
 }
@@ -693,7 +630,7 @@ loglevels_conf = {
 }
 
 loglevels_conf.each do |property, value|
-  glassfish_asadmin "set-log-levels #{property}=#{value}" do 
+  glassfish_asadmin "set-log-levels #{property}=#{value}" do
     domain_name domain_name
     password_file "#{domains_dir}/#{domain_name}_admin_passwd"
     username username
@@ -730,7 +667,7 @@ if node['ldap']['enabled'].to_s == "true" || node['kerberos']['enabled'].to_s ==
   end
 end
 
-if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_conf_path'].to_s.empty? 
+if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_conf_path'].to_s.empty?
   krb_conf_path = node['kerberos']['krb_conf_path']
   remote_file "#{theDomain}/config/krb5.conf" do
     source "file:///#{krb_conf_path}"
@@ -741,7 +678,7 @@ if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_conf_pat
   end
 end
 
-if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_server_key_tab_path'].to_s.empty? 
+if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_server_key_tab_path'].to_s.empty?
   key_tab_path = node['kerberos']['krb_server_key_tab_path']
   ket_tab_name = node['kerberos']['krb_server_key_tab_name']
   remote_file "#{theDomain}/config/#{ket_tab_name}" do
@@ -816,9 +753,9 @@ end
 node.override['glassfish']['asadmin']['timeout'] = 400
 
 if node['install']['enterprise']['install'].casecmp? "true"
-  node.override['hopsworks']['ear_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ear#{node['install']['kubernetes'].casecmp?("true") == 0 ? "-kube" : ""}.ear"
+  node.override['hopsworks']['ear_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ear#{node['install']['kubernetes'].casecmp("true") == 0 ? "-kube" : ""}.ear"
   node.override['hopsworks']['war_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-web.war"
-  node.override['hopsworks']['ca_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ca.war"  
+  node.override['hopsworks']['ca_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ca.war"
 end
 
 glassfish_deployable "hopsworks-ear" do
@@ -846,7 +783,7 @@ glassfish_deployable "hopsworks" do
   target "server"
   url node['hopsworks']['war_url']
   auth_username node['install']['enterprise']['username']
-  auth_password node['install']['enterprise']['password']  
+  auth_password node['install']['enterprise']['password']
   version node['hopsworks']['version']
   context_root "/hopsworks"
   domain_name domain_name
@@ -867,7 +804,7 @@ glassfish_deployable "hopsworks-ca" do
   target "server"
   url node['hopsworks']['ca_url']
   auth_username node['install']['enterprise']['username']
-  auth_password node['install']['enterprise']['password']  
+  auth_password node['install']['enterprise']['password']
   version node['hopsworks']['version']
   context_root "/hopsworks-ca"
   domain_name domain_name
@@ -946,8 +883,24 @@ template "#{::Dir.home(node['hopsworks']['user'])}/.condarc" do
   group node['glassfish']['group']
   mode 0750
   variables({
-    :pkgs_dirs => node['hopsworks']['conda_cache'] 
+    :pkgs_dirs => node['hopsworks']['conda_cache']
   })
+  action :create
+end
+
+directory "#{::Dir.home(node['hopsworks']['user'])}/.pip" do
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0700'
+  action :create
+end
+
+template "#{::Dir.home(node['hopsworks']['user'])}/.pip/pip.conf" do
+  source "pip.conf.erb"
+  cookbook "conda"
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode 0750
   action :create
 end
 
@@ -959,7 +912,7 @@ case node['platform_family']
 
   scala_rpm_path="#{Chef::Config['file_cache_path']}/scala-#{node['scala']['version']}.rpm"
   remote_file scala_rpm_path do
-    source node['scala']['download_url'] 
+    source node['scala']['download_url']
     owner 'root'
     group 'root'
     mode '0755'
@@ -970,7 +923,7 @@ case node['platform_family']
     user "root"
     cwd Chef::Config['file_cache_path']
     code <<-EOF
-      set -e  
+      set -e
       yum install -y scala-#{node['scala']['version']}.rpm
     EOF
     not_if "which scala"
@@ -1083,6 +1036,13 @@ hopsworks_grants "restart_glassfish" do
   action :reload_systemd
 end
 
+# Register Glassfish with Consul
+consul_service "Registering Glassfish with Consul" do
+  service_definition "consul/glassfish-consul.hcl.erb"
+  reload_consul false
+  action :register
+end
+
 template "#{domains_dir}/#{domain_name}/bin/letsencrypt.sh" do
   source "letsencrypt.sh.erb"
   owner node['glassfish']['user']
@@ -1187,4 +1147,3 @@ if node['rstudio']['enabled'].eql? "true"
     EOF
   end
 end
-

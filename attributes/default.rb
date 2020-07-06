@@ -13,6 +13,7 @@ include_attribute "dela"
 include_attribute "hive2"
 include_attribute "hops"
 include_attribute "hops_airflow"
+include_attribute "kube-hops"
 
 default['hopsworks']['version']                  = node['install']['version']
 default['hopsworks']['current_version']          = node['install']['current_version']
@@ -36,10 +37,8 @@ default['hopsworks']['admin']['password']        = "adminpw"
 default['hopsworks']['admin']['email']           = "admin@hopsworks.ai"
 
 default['hopsworks']['db']                       = "hopsworks"
-
-# Usernames and passwords of non-superusers in MySQL
-default['hopsworks']['mysql']['user']['kafka']               = "kafka"
-default['hopsworks']['mysql']['password']['kafka']            = "kafka"
+default['hopsworks']['mysql']['user']            = "hopsworks"
+default['hopsworks']['mysql']['password']        = "hopsworks"
 
 default['glassfish']['version']                  = '4.1.2.181'  # '5.182'
 default['authbind']['download_url']              = "#{node['download_url']}/authbind-2.1.2-0.1.x86_64.rpm"
@@ -416,13 +415,22 @@ default['hopsworks']['requests_verify'] = "true"
 # Provenance
 #
 # Provenance type can be set to MIN/FULL
-default['hopsworks']['provenance']['type']                            = "MIN"
+default['hopsworks']['provenance']['type']                    = "MIN"
 #define how big each archive round is - how many indices get cleaned
 default['hopsworks']['provenance']['archive']['batch_size']   = "10"
 #define how long to keep deleted items before archiving them - default 24h
 default['hopsworks']['provenance']['archive']['delay']        = "86400"
 #define in seconds the period between two provenance cleaner timeouts - default 1h
-default['hopsworks']['provenance']['cleaner']['period']        = "3600"
+default['hopsworks']['provenance']['cleaner']['period']       = "3600"
 
 # clients
 default['hopsworks']['client_path']           = "COMMUNITY"
+
+# hdfs storage policy
+# accepted hopsworks storage policy files: CLOUD, DB, HOT
+# Set the DIR_ROOT (/Projects) to have DB storage policy
+default['hopsworks']['hdfs']['storage_policy']['base']        = "DB" 
+# To not fill the SSDs with Logs files that nobody access frequently we set the StoragePolicy for the LOGS dir to be default HOT
+default['hopsworks']['hdfs']['storage_policy']['log']         = "HOT"
+
+default['hopsworks']['enable_metadata_designer']              = "false"

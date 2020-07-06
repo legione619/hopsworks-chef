@@ -3,32 +3,26 @@ source 'https://supermarket.chef.io'
 
 metadata
 
-cookbook 'conda', github: "giabbo79/conda-chef", branch: "master"
-cookbook 'kagent', github: "giabbo79/kagent-chef", branch: "master"
-cookbook 'hops', github: "giabbo79/hops-hadoop-chef", branch: "master"
-cookbook 'ndb', github: "giabbo79/ndb-chef", branch: "master"
-cookbook 'hadoop_spark', github: "giabbo79/spark-chef", branch: "master"
-cookbook 'flink', github: "giabbo79/flink-chef", branch: "master"
-cookbook 'livy', github: "giabbo79/livy-chef", branch: "master"
-cookbook 'drelephant', github: "giabbo79/dr-elephant-chef", branch: "master"
-cookbook 'epipe', github: "giabbo79/epipe-chef", branch: "master"
-cookbook 'tensorflow', github: "giabbo79/tensorflow-chef", branch: "master"
-cookbook 'dela', github: "giabbo79/dela-chef", branch: "master"
-cookbook 'kzookeeper', github: "giabbo79/kzookeeper", branch: "master"
-cookbook 'kkafka', github: "giabbo79/kafka-cookbook", branch: "master"
-cookbook 'elastic', github: "giabbo79/elasticsearch-chef", branch: "master"
-cookbook 'hopslog', github: "giabbo79/hopslog-chef", branch: "master"
-cookbook 'hopsmonitor', github: "giabbo79/hopsmonitor-chef", branch: "master"
-cookbook 'glassfish', github: "giabbo79/chef-glassfish", branch: "master"
-cookbook 'hops_airflow', github: "giabbo79/airflow-chef", branch: "master"
-cookbook 'hive2', github: "giabbo79/hive-chef", branch: "master"
+cookbook 'conda', github: "giabbo79/conda-chef", branch: "1.3"
+cookbook 'kagent', github: "giabbo79/kagent-chef", branch: "1.3"
+cookbook 'hops', github: "giabbo79/hops-hadoop-chef", branch: "1.3"
+cookbook 'ndb', github: "giabbo79/ndb-chef", branch: "1.3"
+cookbook 'hadoop_spark', github: "giabbo79/spark-chef", branch: "1.3"
+cookbook 'flink', github: "giabbo79/flink-chef", branch: "1.3"
+cookbook 'livy', github: "giabbo79/livy-chef", branch: "1.3"
+cookbook 'drelephant', github: "giabbo79/dr-elephant-chef", branch: "1.3"
+cookbook 'epipe', github: "giabbo79/epipe-chef", branch: "1.3"
+cookbook 'tensorflow', github: "giabbo79/tensorflow-chef", branch: "1.3"
+cookbook 'dela', github: "giabbo79/dela-chef", branch: "1.3"
+cookbook 'kzookeeper', github: "giabbo79/kzookeeper", branch: "1.3"
+cookbook 'kkafka', github: "giabbo79/kafka-cookbook", branch: "1.3"
+cookbook 'elastic', github: "giabbo79/elasticsearch-chef", branch: "1.3"
+cookbook 'hopslog', github: "giabbo79/hopslog-chef", branch: "1.3"
+cookbook 'hopsmonitor', github: "giabbo79/hopsmonitor-chef", branch: "1.3"
+cookbook 'hops_airflow', github: "giabbo79/airflow-chef", branch: "1.3"
+cookbook 'hive2', github: "giabbo79/hive-chef", branch: "1.3"
+cookbook 'consul', github: "giabbo79/consul-chef", branch: "1.3"
+cookbook 'kube-hops', github: "giabbo79/kube-hops-chef", branch: "1.3"
 
-cookbook 'ulimit', github: "giabbo79/chef-ulimit", branch: "master"
-cookbook 'java'
-
-cookbook 'graphite', '~> 1.0.4'
-cookbook 'simple-logstash', '~> 0.2.4'
-cookbook 'compat_resource', '~> 12.19.0'
-cookbook 'authbind', '~> 0.1.10'
-cookbook 'ntp', '~> 2.0.0'
-cookbook 'sysctl', '~> 1.0.3'
+cookbook 'ulimit', github: "giabbo79/chef-ulimit", branch: "1.3"
+cookbook 'glassfish', github: "giabbo79/chef-glassfish", branch: "1.3"
