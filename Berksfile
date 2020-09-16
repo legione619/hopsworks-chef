@@ -22,7 +22,7 @@ cookbook 'hopsmonitor', github: "giabbo79/hopsmonitor-chef", branch: "1.3"
 cookbook 'hops_airflow', github: "giabbo79/airflow-chef", branch: "1.3"
 cookbook 'hive2', github: "giabbo79/hive-chef", branch: "1.3"
 cookbook 'consul', github: "giabbo79/consul-chef", branch: "1.3"
-cookbook 'kube-hops', github: "giabbo79/kube-hops-chef", branch: "1.3"
+#cookbook 'kube-hops', github: "giabbo79/kube-hops-chef", branch: "1.3"
 
 cookbook 'ulimit', github: "giabbo79/chef-ulimit", branch: "1.3"
 cookbook 'glassfish', github: "giabbo79/chef-glassfish", branch: "1.3"
