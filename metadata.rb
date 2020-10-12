@@ -4,7 +4,7 @@ maintainer_email "jdowling@kth.se"
 license          "Apache v2.0"
 description      "Installs/Configures HopsWorks, the UI for Hops Hadoop."
 long_description IO.read(File.join(File.dirname(__FILE__), 'README.md'))
-version          "1.3.0"
+version          "1.4.0"
 source_url       "https://github.com/logicalclocks/hopsworks-chef"
 
 
@@ -136,6 +136,10 @@ attribute "hopsworks/group",
           :description => "Hopsworks/glassfish group to run service as",
           :type => 'string'
 
+attribute "glassfish/user-home",
+          :description => "Home directory of glassfish user",
+          :type => 'string'
+
 attribute "hopsworks/domains_dir",
           :description => "Installation directory for the glassfish domains",
           :type => 'string'
@@ -206,6 +210,10 @@ attribute "hopsworks/https/port",
           :description => "Port that webserver will listen on",
           :type => 'string'
 
+attribute "hopsworks/internal/port",
+          :description => "Port that the webserver will listen on for internal calls",
+          :type => 'string'
+
 attribute "hopsworks/max_mem",
           :description => "glassfish/max_mem",
           :type => 'string'
@@ -228,6 +236,10 @@ attribute "hopsworks/max_perm_size",
 
 attribute "hopsworks/reinstall",
           :description => "Enter 'true' if this is a reinstallation",
+          :type => 'string'
+
+attribute "hopsworks/download_url",
+          :description => "Base URL to download Hopsworks artifacts e.g. DOWNLOAD_URL/hopsworks.war",
           :type => 'string'
 
 attribute "hopsworks/war_url",
@@ -375,14 +387,6 @@ attribute "serving/base_dir",
           :description => "base directory for temporary directories for serving servers",
           :type => 'string'
 
-attribute "serving/user",
-          :description => "user to launch serving servers as",
-          :type => 'string'
-
-attribute "serving/group",
-          :description => "group to launch serving servers as",
-          :type => 'string'
-
 attribute "serving/pool_size",
           :description => "size of the connection pool for serving inference requests to model serving servers",
           :type => 'string'
@@ -396,14 +400,6 @@ attribute "serving/max_route_connections",
 ## Jupyter
 ##
 ##
-
-attribute "jupyter/user",
-          :description => "Jupyter username to run notebook servers as",
-          :type => 'string'
-
-attribute "jupyter/group",
-          :description => "Jupyter group to run notebook servers as",
-          :type => 'string'
 
 attribute "jupyter/python",
           :description => "'true' (default) to enable the python interpreter, 'false' to disable it (more secure). ",
@@ -724,6 +720,10 @@ attribute "ldap/additional_props",
           :description => "LDAP additional properties. '' (default)",
           :type => 'string'
 
+attribute "ldap/group_mapping_sync_interval",
+          :description => "LDAP group mapping sync interval in hours. 0 (default)",
+          :type => 'string'
+
 #
 # Kerberos
 #
@@ -952,3 +952,13 @@ attribute "hopsworks/hdfs/storage_policy/log",
 attribute "hopsworks/enable_metadata_designer",
           :description => "Enable metadata designer. 'false' (default)",
           :type => 'string'
+
+# Expat
+attribute "hopsworks/expat_url",
+          :description => "Url to download expat from",
+          :type => 'string'
+
+#TensorBoard'
+attribute "tensorboard/max/reload/threads",
+          :description => "The max number of threads that TensorBoard can use to reload runs. Not relevant for db read-only mode. Each thread reloads one run at a time.",
+          :type => "string"

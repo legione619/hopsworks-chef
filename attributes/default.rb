@@ -15,21 +15,23 @@ include_attribute "hops"
 include_attribute "hops_airflow"
 include_attribute "kube-hops"
 
-default['hopsworks']['version']                  = node['install']['version']
+default['hopsworks']['version']                  = "1.4.1"
 default['hopsworks']['current_version']          = node['install']['current_version']
 
 # Flyway needs to know the previous versions of Hopsworks to generate the .sql files.
 # comma-separated string of previous versions hopsworks (not including the current version)
 # E.g., "0.1.1, 0.1.2"
-default['hopsworks']['versions']                 = node['install']['versions']
+default['hopsworks']['versions']                 = "#{node['install']['versions']},1.4.0"
 
 default['glassfish']['variant']                  = "payara"
 default['hopsworks']['user']                     = node['install']['user'].empty? ? "glassfish" : node['install']['user']
 default['glassfish']['user']                     = node['hopsworks']['user']
 default['hopsworks']['group']                    = node['install']['user'].empty? ? "glassfish" : node['install']['user']
 default['glassfish']['group']                    = node['hopsworks']['group']
+default['glassfish']['user-home']                = "/home/#{node['hopsworks']['user']}"
 
 default['hopsworks']['https']['port']            = 8181
+default['hopsworks']['internal']['port']         = 8182
 
 default['hopsworks']['admin']['port']            = 4848
 default['hopsworks']['admin']['user']            = "adminuser"
@@ -67,6 +69,7 @@ default['hopsworks']['max_stack_size']           = "1500"
 default['glassfish']['max_stack_size']           = node['hopsworks']['max_stack_size'].to_i
 default['hopsworks']['http_logs']['enabled']     = "true"
 default['hopsworks']['env_var_file']             = "#{node['hopsworks']['domains_dir']}/#{node['hopsworks']['domain_name']}_environment_variables"
+default['hopsworks']['config_dir']               = "#{node['hopsworks']['domains_dir']}/#{node['hopsworks']['domain_name']}/config"
 
 default['glassfish']['reschedule_failed_timer']     = "true"
 
@@ -74,9 +77,10 @@ default['glassfish']['package_url']              = node['download_url'] + "/paya
 default['hopsworks']['cauth_version']            = "otp-auth-0.4.0.jar"
 default['hopsworks']['cauth_url']                = "#{node['download_url']}/#{node['hopsworks']['cauth_version']}"
 
-default['hopsworks']['war_url']                  = "#{node['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-web.war"
-default['hopsworks']['ca_url']                   = "#{node['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ca.war"
-default['hopsworks']['ear_url']                  = "#{node['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ear#{node['install']['kubernetes'].casecmp?("true") ? "-kube" : ""}.ear"
+default['hopsworks']['download_url']             = "#{node['install']['enterprise']['install'].casecmp?("true") ? node['install']['enterprise']['download_url'] : node['download_url']}/hopsworks/#{node['hopsworks']['version']}"
+default['hopsworks']['war_url']                  = "#{node['hopsworks']['download_url']}/hopsworks-web.war"
+default['hopsworks']['ca_url']                   = "#{node['hopsworks']['download_url']}/hopsworks-ca.war"
+default['hopsworks']['ear_url']                  = "#{node['hopsworks']['download_url']}/hopsworks-ear#{node['install']['kubernetes'].casecmp?("true") ? "-kube" : ""}.ear"
 
 default['hopsworks']['logsize']                  = "200000000"
 
@@ -132,7 +136,7 @@ default['hopsworks']['hdfs_default_quota_mbs']           = "500000"
 default['hopsworks']['hive_default_quota_mbs']           = "250000"
 default['hopsworks']['featurestore_default_quota_mbs']   = "250000"
 default['hopsworks']['max_num_proj_per_user']            = "10"
-default['hopsworks']['reserved_project_names']           = "python27,python36,python37,python38,python39,hops-system,hopsworks,information_schema,airflow,glassfish_timers,grafana,hops,metastore,mysql,ndbinfo,performance_schema,sqoop,sys"
+default['hopsworks']['reserved_project_names']           = "hops-system,hopsworks,information_schema,airflow,glassfish_timers,grafana,hops,metastore,mysql,ndbinfo,performance_schema,sqoop,sys"
 
 # file preview and download
 default['hopsworks']['file_preview_image_size']  = "10000000"
@@ -240,8 +244,6 @@ default['hopsworks']['nonconda_hosts']               = ""
 # Jupyter
 #
 default['jupyter']['base_dir']                         = node['install']['dir'].empty? ? node['hopsworks']['dir'] + "/jupyter" : node['install']['dir'] + "/jupyter"
-default['jupyter']['user']                             = node['install']['user'].empty? ? "jupyter" : node['install']['user']
-default['jupyter']['group']                            = node['install']['user'].empty? ? "jupyter" : node['install']['user']
 default['jupyter']['python']                           = "true"
 default['jupyter']['shutdown_timer_interval']          = "30m"
 default['jupyter']['ws_ping_interval']                 = "10s"
@@ -251,10 +253,13 @@ default['jupyter']['origin_scheme']                    = "https"
 # Serving
 #
 default['serving']['base_dir']                       = node['install']['dir'].empty? ? node['hopsworks']['dir'] + "/staging" : node['install']['dir'] + "/staging"
-default['serving']['user']                           = node['install']['user'].empty? ? "serving" : node['install']['user']
-default['serving']['group']                          = node['install']['user'].empty? ? "serving" : node['install']['user']
 default['serving']['pool_size']                      = "40"
 default['serving']['max_route_connections']          = "10"
+
+#
+# TensorBoard
+#
+default['tensorboard']['max']['reload']['threads']          = "1"
 
 #
 # PyPi
@@ -331,6 +336,7 @@ default['ldap']['security_principal']                = ""
 default['ldap']['security_credentials']              = ""
 default['ldap']['referral']                          = "ignore"
 default['ldap']['additional_props']                  = ""
+default['ldap']['group_mapping_sync_interval']       = 0
 
 # OAuth2
 default['oauth']['enabled']                          = "false"
@@ -409,7 +415,7 @@ default['featurestore']['user']                            = node['mysql']['user
 default['featurestore']['password']                        = node['mysql']['password']
 
 # hops-util-py
-default['hopsworks']['requests_verify'] = "true"
+default['hopsworks']['requests_verify']                    = node['hops']['tls']['enabled']
 
 #
 # Provenance
@@ -429,7 +435,7 @@ default['hopsworks']['client_path']           = "COMMUNITY"
 # hdfs storage policy
 # accepted hopsworks storage policy files: CLOUD, DB, HOT
 # Set the DIR_ROOT (/Projects) to have DB storage policy
-default['hopsworks']['hdfs']['storage_policy']['base']        = "DB" 
+default['hopsworks']['hdfs']['storage_policy']['base']        = "DB"
 # To not fill the SSDs with Logs files that nobody access frequently we set the StoragePolicy for the LOGS dir to be default HOT
 default['hopsworks']['hdfs']['storage_policy']['log']         = "HOT"
 

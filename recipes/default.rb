@@ -1,4 +1,6 @@
 include_recipe "java"
+
+Chef::Recipe.send(:include, Hops::Helpers)
 Chef::Resource.send(:include, Hops::Helpers)
 
 domain_name= node['hopsworks']['domain_name']
@@ -40,20 +42,6 @@ begin
 rescue
   jhs_ip = node['hostname']
   Chef::Log.warn "could not find the MR job history server ip!"
-end
-
-begin
-  epipe_ip = private_recipe_ip("epipe","default")
-rescue
-  epipe_ip = node['hostname']
-  Chef::Log.warn "could not find th epipe server ip!"
-end
-
-begin
-  kafka_ip = private_recipe_ip("kkafka","default")
-rescue
-  kafka_ip = node['hostname']
-  Chef::Log.warn "could not find the kafka server ip!"
 end
 
 begin
@@ -102,13 +90,13 @@ bash 'create_hopsworks_db' do
   code <<-EOF
       set -e
       #{exec} -e \"CREATE DATABASE IF NOT EXISTS #{node['hopsworks']['db']} CHARACTER SET latin1\"
-      #{exec} -e \"CREATE USER IF NOT EXISTS #{node['hopsworks']['mysql']['user']} IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']}\';\"
-      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hopsworks']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hops']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\' IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']}\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hopsworks']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hops']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
       # Hopsworks needs to the quotas tables
-      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.yarn_projects_quota TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.hdfs_directory_with_quota_feature TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON metastore.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.yarn_projects_quota TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.hdfs_directory_with_quota_feature TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON metastore.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
     EOF
 end
 
@@ -165,20 +153,13 @@ if node['conda']['channels']['default_mirrors'].empty? == false
    condaRepo = repos[0]
 end
 
-nonconda_hosts_list = []
-if node['hopsworks']['nonconda_hosts'].empty? == false
-  nonconda_hosts_list = node['hopsworks']['nonconda_hosts'].split(/\s*,\s*/)
-end
-
-mysql_host = private_recipe_ip("ndb","mysqld")
-
 featurestore_jdbc_url = node['featurestore']['jdbc_url']
 featurestore_jdbc_url_escaped = featurestore_jdbc_url.gsub(':', '\\\\:')
 # In case of an upgrade, attribute-driven-domain will not run but we still need to configure
 # connection pool for the online featurestore
 if node['featurestore']['jdbc_url'].eql? "localhost"
-  featurestore_jdbc_url="jdbc:mysql://#{mysql_host}:#{node['ndb']['mysql_port']}/"
-  featurestore_jdbc_url_escaped="\"jdbc\\:mysql\\://#{mysql_host}\\:#{node['ndb']['mysql_port']}/\""
+  featurestore_jdbc_url="jdbc:mysql://127.0.0.1:#{node['ndb']['mysql_port']}/"
+  featurestore_jdbc_url_escaped="\"jdbc\\:mysql\\://127.0.0.1\\:#{node['ndb']['mysql_port']}/\""
 end
 
 # hops-util-py only works for localhost installations if you disable TLS hostname validations
@@ -275,7 +256,6 @@ for version in versions do
          :user_cert_valid_days => node['hopsworks']['cert']['user_cert_valid_days'],
          :conda_repo => condaRepo,
          :hosts => hosts,
-         :epipe_ip => epipe_ip,
          :jhs_ip => jhs_ip,
          :hopsworks_ip => hopsworks_ip,
          :elastic_ip => elastic_ips,
@@ -290,14 +270,12 @@ for version in versions do
          :featurestore_default_quota => node['hopsworks']['featurestore_default_quota_mbs'].to_i,
          :java_home => node['java']['java_home'],
          :drelephant_ip => drelephant_ip,
-         :kafka_ip => kafka_ip,
          :kibana_ip => kibana_ip,
          :python_kernel => python_kernel,
          :grafana_ip => grafana_ip,
          :influxdb_ip => influxdb_ip,
          :public_ip => public_ip,
          :dela_ip => dela_ip,
-         :nonconda_hosts_list => nonconda_hosts_list,
          :krb_ldap_auth => node['ldap']['enabled'].to_s == "true" || node['kerberos']['enabled'].to_s == "true",
          :featurestore_jdbc_url => featurestore_jdbc_url,
          :hops_version => get_hops_version(node['hops']['version'])
@@ -360,11 +338,11 @@ begin
     user "root"
     code <<-EOF
       set -e
-      #{exec} -e \"CREATE USER IF NOT EXISTS #{node['kkafka']['mysql']['user']} IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'%\'\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\' IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\'\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
     EOF
   end
 rescue
@@ -414,6 +392,16 @@ ruby_block "export_hadoop_classpath" do
     file.insert_line_if_no_match(/#{variable}/, variable)
     hadoop_conf_dir_var = "HADOOP_CONF_DIR=#{node['hops']['conf_dir']}"
     file.insert_line_if_no_match(/#{variable}/, hadoop_conf_dir_var)
+    file.write_file
+  end
+  action :create
+end
+
+ruby_block "export_hadoop_classpath" do
+  block do
+    file = Chef::Util::FileEdit.new("/lib/systemd/system/glassfish-domain1.service")
+    new_line = "ExecStartPre=/bin/bash -c 'sleep 5 && if systemctl list-units --full -all | grep -Fq 'mysqld.service'; then systemctl is-active --quiet mysqld; fi'"
+    file.insert_line_if_no_match(/#{new_line}/, new_line)
     file.write_file
   end
   action :create
@@ -495,6 +483,43 @@ glassfish_asadmin "set-monitoring-configuration --dynamic true --enabled true --
    secure false
 end
 
+# add new network listener for Hopsworks to listen on an internal port
+glassfish_asadmin "create-protocol --securityenabled=true --target server https-internal" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-protocols | grep 'https-internal'"
+end
+
+glassfish_asadmin "create-http --default-virtual-server server https-internal" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} get server.network-config.protocols.protocol.https-internal.* | grep 'http.version'"
+end
+
+glassfish_asadmin "create-network-listener --listenerport #{node['hopsworks']['internal']['port']} --threadpool http-thread-pool --target server --protocol https-internal https-int-list" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-http-listeners | grep 'https-int-list'"
+end
+
+glassfish_asadmin "create-managed-executor-service --enabled=true --longrunningtasks=true --corepoolsize=50 --maximumpoolsize=400 --keepaliveseconds=60 --taskqueuecapacity=20000 concurrent/condaExecutorService" do
+   domain_name domain_name
+   password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+   username username
+   admin_port admin_port
+   secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-managed-executor-services | grep 'conda'"
+end
+
 glassfish_conf = {
   'server-config.security-service.default-realm' => 'cauthRealm',
   # Jobs in Hopsworks use the Timer service
@@ -508,15 +533,19 @@ glassfish_conf = {
   # Disable SSL3
   'server.network-config.protocols.protocol.http-listener-2.ssl.ssl3-enabled' => false,
   'server.network-config.protocols.protocol.sec-admin-listener.ssl.ssl3-enabled' => false,
+  'server.network-config.protocols.protocol.https-internal.ssl.ssl3-enabled' => false,
   # Disable TLS 1.0
   'server.network-config.protocols.protocol.http-listener-2.ssl.tls-enabled' => false,
   'server.network-config.protocols.protocol.sec-admin-listener.ssl.tls-enabled' => false,
+  'server.network-config.protocols.protocol.https-internal.ssl.tls-enabled' => false,
   # Restrict ciphersuite
   'configs.config.server-config.network-config.protocols.protocol.http-listener-2.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
   'configs.config.server-config.network-config.protocols.protocol.sec-admin-listener.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
+  'configs.config.server-config.network-config.protocols.protocol.https-internal.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
   # Set correct thread-priority for the executor services - required during updates
   'resources.managed-executor-service.concurrent\/hopsExecutorService.thread-priority' => 10,
   'resources.managed-thread-factory.concurrent\/hopsThreadFactory.thread-priority' => 10,
+  'resources.managed-executor-service.concurrent\/condaExecutorService.thread-priority' => 9,
   # Enable Single Sign on
   'configs.config.server-config.http-service.virtual-server.server.sso-enabled' => true,
   'configs.config.server-config.http-service.virtual-server.server.sso-cookie-http-only' => true,
@@ -537,10 +566,12 @@ glassfish_conf = {
   'configs.config.server-config.monitoring-service.module-monitoring-levels.web-container' => 'HIGH',
   'server.network-config.protocols.protocol.http-listener-2.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout'],
   'server.network-config.protocols.protocol.http-listener-1.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout'],
+  'server.network-config.protocols.protocol.https-internal.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout'],
   'resources.jdbc-connection-pool.hopsworksPool.property.User' => node['hopsworks']['mysql']['user'],
   'resources.jdbc-connection-pool.hopsworksPool.property.Password' => node['hopsworks']['mysql']['password'],
   'resources.jdbc-connection-pool.ejbTimerPool.property.User' => node['hopsworks']['mysql']['user'],
-  'resources.jdbc-connection-pool.ejbTimerPool.property.Password' => node['hopsworks']['mysql']['password']
+  'resources.jdbc-connection-pool.ejbTimerPool.property.Password' => node['hopsworks']['mysql']['password'],
+  'server.network-config.protocols.protocol.https-internal.ssl.cert-nickname' => 'internal'
 }
 
 glassfish_conf.each do |property, value|
@@ -567,7 +598,7 @@ if exists_local("hops_airflow", "default")
   airflow_exists = true
   # In case of an upgrade, attribute-driven-domain will not run but we still need to configure
   # connection pool for Airflow
-  glassfish_asadmin "create-jdbc-connection-pool --restype javax.sql.DataSource --datasourceclassname com.mysql.jdbc.jdbc2.optional.MysqlDataSource --ping=true --isconnectvalidatereq=true --validationmethod=auto-commit --description=\"Airflow connection pool\" --property user=#{node['airflow']['mysql_user']}:password=#{node['airflow']['mysql_password']}:url=\"jdbc\\:mysql\\://#{mysql_host}\\:3306/\" airflowPool" do
+  glassfish_asadmin "create-jdbc-connection-pool --restype javax.sql.DataSource --datasourceclassname com.mysql.jdbc.jdbc2.optional.MysqlDataSource --ping=true --isconnectvalidatereq=true --validationmethod=auto-commit --description=\"Airflow connection pool\" --property user=#{node['airflow']['mysql_user']}:password=#{node['airflow']['mysql_password']}:url=\"jdbc\\:mysql\\://127.0.0.1\\:3306/\" airflowPool" do
     domain_name domain_name
     password_file "#{domains_dir}/#{domain_name}_admin_passwd"
     username username
@@ -608,8 +639,8 @@ end
 logging_conf = {
   'com.sun.enterprise.server.logging.GFFileHandler.logtoFile' => true,
   'com.sun.enterprise.server.logging.GFFileHandler.rotationLimitInBytes' => node['hopsworks']['logsize'],
-  # These are just some random number, we are not enabling this logger. However if they are not set
   # the main logger doesn't work either.
+  # These are just some random number, we are not enabling this logger. However if they are not set
   'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.rotationLimitInBytes' => 2000000,
   'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.rotationTimelimitInMinutes' => 0,
   'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.maxHistoryFiles' => 3
@@ -751,11 +782,16 @@ hopsworks_mail "gmail" do
 end
 
 node.override['glassfish']['asadmin']['timeout'] = 400
-
-if node['install']['enterprise']['install'].casecmp? "true"
-  node.override['hopsworks']['ear_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ear#{node['install']['kubernetes'].casecmp("true") == 0 ? "-kube" : ""}.ear"
-  node.override['hopsworks']['war_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-web.war"
-  node.override['hopsworks']['ca_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ca.war"
+  
+if node['install']['enterprise']['install'].casecmp? "true" and exists_local("cloud", "default")
+  unmanaged = false
+  if node.attribute? 'cloud' and node['cloud'].attribute? 'init' and node['cloud']['init'].attribute? 'config' and node['cloud']['init']['config'].attribute? 'unmanaged'
+    unmanaged = node['cloud']['init']['config']['unmanaged'].casecmp? 'true'
+  end
+  unless unmanaged
+    ear_name = (node['install']['kubernetes'].casecmp?("true") and node['install']['managed_kubernetes'].casecmp?("true")) ? "hopsworks-ear-cloud-kube.ear" : "hopsworks-ear-cloud.ear"
+    node.override['hopsworks']['ear_url'] = "#{node['hopsworks']['download_url']}/#{ear_name}"
+  end
 end
 
 glassfish_deployable "hopsworks-ear" do
@@ -876,6 +912,7 @@ link "delete-crl-symlink" do
   action :delete
 end
 
+
 template "#{::Dir.home(node['hopsworks']['user'])}/.condarc" do
   source "condarc.erb"
   cookbook "conda"
@@ -963,14 +1000,14 @@ directory node['hopsworks']['staging_dir']  do
 end
 
 directory node['hopsworks']['staging_dir'] + "/private_dirs"  do
-  owner node['jupyter']['user']
+  owner node['hops']['yarnapp']['user']
   group node['hopsworks']['group']
   mode "0370"
   action :create
 end
 
 directory node['hopsworks']['staging_dir'] + "/serving"  do
-  owner node['serving']['user']
+  owner node['hopsworks']['user']
   group node['hopsworks']['group']
   mode "0730"
   action :create
@@ -1036,6 +1073,18 @@ hopsworks_grants "restart_glassfish" do
   action :reload_systemd
 end
 
+hopsworks_certs "generate-int-certs" do
+  subject     "/CN=#{consul_helper.get_service_fqdn("hopsworks.glassfish")}/OU=0"
+  action      :generate_int_certs
+  not_if      (::File.exist?("#{node['hopsworks']['config_dir']}/internal_bundle.crt"))
+end
+
+# Force reload of the certificate
+hopsworks_grants "restart_glassfish" do
+  action :reload_systemd
+end
+
+
 # Register Glassfish with Consul
 consul_service "Registering Glassfish with Consul" do
   service_definition "consul/glassfish-consul.hcl.erb"
@@ -1056,14 +1105,6 @@ directory "/usr/local/share/jupyter/nbextensions/witwidget"  do
   mode "775"
   action :create
   recursive true
-end
-
-include_recipe "tensorflow::serving"
-
-link "#{node['kagent']['certs_dir']}/cacerts.jks" do
-  owner node['glassfish']['user']
-  group node['glassfish']['group']
-  to "#{theDomain}/config/cacerts.jks"
 end
 
 #
