@@ -7,17 +7,6 @@ domains_dir = node['hopsworks']['domains_dir']
 theDomain="#{domains_dir}/#{domain_name}"
 password_file = "#{theDomain}_admin_passwd"
 
-featurestore_user=node['featurestore']['user']
-featurestore_password=node['featurestore']['password']
-
-featurestore_jdbc_url = node['featurestore']['jdbc_url']
-# In case of an upgrade, attribute-driven-domain will not run but we still need to configure
-# connection pool for the online featurestore
-if node['featurestore']['jdbc_url'].eql? "localhost"
-  featurestore_jdbc_url="jdbc:mysql://127.0.0.1:#{node['ndb']['mysql_port']}/"
-end
-
-
 bash "systemd_reload_for_glassfish_failures" do
   user "root"
   ignore_failure true
@@ -301,7 +290,7 @@ node.override = {
         'jdbc_connection_pools' => {
           'hopsworksPool' => {
             'config' => {
-              'datasourceclassname' => 'com.mysql.jdbc.jdbc2.optional.MysqlDataSource',
+              'datasourceclassname' => 'com.mysql.cj.jdbc.MysqlDataSource',
               'restype' => 'javax.sql.DataSource',
               'isconnectvalidatereq' => 'true',
               'validationmethod' => 'auto-commit',
@@ -310,7 +299,9 @@ node.override = {
               'properties' => {
                 'Url' => "jdbc:mysql://127.0.0.1:3306/",
                 'User' => node['hopsworks']['mysql']['user'],
-                'Password' => node['hopsworks']['mysql']['password']
+                'Password' => node['hopsworks']['mysql']['password'],
+                'useSSL' => 'false',
+                'allowPublicKeyRetrieval' => 'true'
               }
             },
             'resources' => {
@@ -321,16 +312,18 @@ node.override = {
           },
           'featureStorePool' => {
             'config' => {
-              'datasourceclassname' => 'com.mysql.jdbc.jdbc2.optional.MysqlDataSource',
+              'datasourceclassname' => 'com.mysql.cj.jdbc.MysqlDataSource',
               'restype' => 'javax.sql.DataSource',
               'isconnectvalidatereq' => 'true',
               'validationmethod' => 'auto-commit',
               'ping' => 'true',
               'description' => 'FeatureStore Connection Pool',
               'properties' => {
-                'Url' => featurestore_jdbc_url,
-                'User' => featurestore_user,
-                'Password' => featurestore_password
+                'Url' => node['featurestore']['hopsworks_url'],
+                'User' => node['featurestore']['user'],
+                'Password' => node['featurestore']['password'],
+                'useSSL' => 'false',
+                'allowPublicKeyRetrieval' => 'true'
               }
             },
             'resources' => {
@@ -341,7 +334,7 @@ node.override = {
           },
           'airflowPool' => {
             'config' => {
-              'datasourceclassname' => 'com.mysql.jdbc.jdbc2.optional.MysqlDataSource',
+              'datasourceclassname' => 'com.mysql.cj.jdbc.MysqlDataSource',
               'restype' => 'javax.sql.DataSource',
               'isconnectvalidatereq' => 'true',
               'validationmethod' => 'auto-commit',
@@ -350,7 +343,9 @@ node.override = {
               'properties' => {
                 'Url' => "jdbc:mysql://127.0.0.1:3306/",
                 'User' => node['airflow']['mysql_user'],
-                'Password' => node['airflow']['mysql_password']
+                'Password' => node['airflow']['mysql_password'],
+                'useSSL' => 'false',
+                'allowPublicKeyRetrieval' => 'true'
               }
             },
             'resources' => {
@@ -361,16 +356,18 @@ node.override = {
           },
           'ejbTimerPool' => {
             'config' => {
-              'datasourceclassname' => 'com.mysql.jdbc.jdbc2.optional.MysqlDataSource',
+              'datasourceclassname' => 'com.mysql.cj.jdbc.MysqlDataSource',
               'restype' => 'javax.sql.DataSource',
               'isconnectvalidatereq' => 'true',
               'validationmethod' => 'auto-commit',
               'ping' => 'true',
-              'description' => 'Hopsworks Connection Pool',
+              'description' => 'Hopsworks EJB Connection Pool',
               'properties' => {
                 'Url' => "jdbc:mysql://127.0.0.1:3306/glassfish_timers",
                 'User' => node['hopsworks']['mysql']['user'],
-                'Password' => node['hopsworks']['mysql']['password']
+                'Password' => node['hopsworks']['mysql']['password'],
+                'useSSL' => 'false',
+                'allowPublicKeyRetrieval' => 'true'
               }
             },
             'resources' => {
@@ -409,6 +406,16 @@ else
     end
   end
 end 
+
+mysql_connector = File.basename(node['hopsworks']['mysql_connector_url'])
+
+remote_file "#{theDomain}/lib/#{mysql_connector}"  do
+  user node['glassfish']['user']
+  group node['glassfish']['group']
+  source node['hopsworks']['mysql_connector_url']
+  mode 0755
+  action :create_if_missing
+end
 
 cauth = File.basename(node['hopsworks']['cauth_url'])
 
@@ -806,10 +813,12 @@ bash "unpack_flyway" do
     mv #{flyway} #{theDomain}
     cd #{theDomain}
     chown -R #{node['glassfish']['user']} flyway*
-    rm -rf flyway
+    if [ -L flyway ]; then
+      cp -r flyway/sql #{flyway}/ 
+      rm -rf flyway
+    fi
     ln -s #{flyway} flyway
   EOF
-  not_if { ::File.exists?("#{theDomain}/flyway/flyway") }
 end
 
 template "#{theDomain}/flyway/conf/flyway.conf" do
