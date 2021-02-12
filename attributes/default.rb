@@ -8,7 +8,6 @@ include_attribute "elastic"
 include_attribute "glassfish"
 include_attribute "kkafka"
 include_attribute "kzookeeper"
-include_attribute "drelephant"
 include_attribute "dela"
 include_attribute "hive2"
 include_attribute "hops"
@@ -130,13 +129,14 @@ default['hopsworks']['alert_email_addrs']        = ""
 
 default['hopsworks']['support_email_addr']       = "support@logicalclocks.com"
 
-# #quotas
+#quotas
 default['hopsworks']['yarn_default_quota_mins']          = "1000000"
-default['hopsworks']['hdfs_default_quota_mbs']           = "500000"
-default['hopsworks']['hive_default_quota_mbs']           = "250000"
-default['hopsworks']['featurestore_default_quota_mbs']   = "250000"
+default['hopsworks']['yarn_default_payment_type']        = "NOLIMIT"
+default['hopsworks']['hdfs_default_quota_mbs']           = "-1"
+default['hopsworks']['hive_default_quota_mbs']           = "-1"
+default['hopsworks']['featurestore_default_quota_mbs']   = "-1"
 default['hopsworks']['max_num_proj_per_user']            = "10"
-default['hopsworks']['reserved_project_names']           = "hops-system,hopsworks,information_schema,airflow,glassfish_timers,grafana,hops,metastore,mysql,ndbinfo,performance_schema,sqoop,sys"
+default['hopsworks']['reserved_project_names']           = "hops-system,hopsworks,information_schema,airflow,glassfish_timers,grafana,hops,metastore,mysql,ndbinfo,performance_schema,sqoop,sys,base,python37,filebeat"
 
 # file preview and download
 default['hopsworks']['file_preview_image_size']  = "10000000"
@@ -387,7 +387,7 @@ default['hopsworks']['expat_dir']                    = "#{node['install']['dir']
 #
 # Feature Store
 #
-default['hopsworks']['featurestore_default_storage_format']   = "ORC"
+default['hopsworks']['featurestore_default_storage_format']   = "PARQUET"
 default['hopsworks']['featurestore_online']                   = "false"
 
 default['scala']['version']                   = "2.11.8"
@@ -441,6 +441,4 @@ default['hopsworks']['hdfs']['storage_policy']['base']        = "DB"
 default['hopsworks']['hdfs']['storage_policy']['log']         = "HOT"
 
 default['hopsworks']['enable_metadata_designer']              = "false"
-
-#check nodemanager status
 default["hopsworks"]['check_nodemanager_status']              = "false"

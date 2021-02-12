@@ -592,14 +592,6 @@ kagent_sudoers "convert-ipython-notebook" do
   run_as        "ALL" # run this as root - inside we change to different users 
 end
 
-kagent_sudoers "dockerImage" do 
-  user          node['glassfish']['user']
-  group         "root"
-  script_name   "dockerImage.sh"
-  template      "dockerImage.sh.erb"
-  run_as        "ALL" # run this as root - inside we change to different users 
-end
-
 kagent_sudoers "tensorboard" do 
   user          node['glassfish']['user']
   group         "root"
@@ -650,14 +642,6 @@ kagent_sudoers "ca-keystore" do
   template      "ca-keystore.sh.erb"
   run_as        "ALL"
   only_if       { node['hopsworks']['dela']['enabled'].casecmp("true") == 0 }
-end
-
-kagent_sudoers "start-llap" do 
-  user          node['glassfish']['user']
-  group         node['hops']['group']
-  script_name   "start-llap.sh"
-  template      "start-llap.sh.erb"
-  run_as        node["hive2"]['user']
 end
 
 command=""
@@ -853,3 +837,20 @@ directory "#{theDomain}/flyway/dml/undo" do
   action :create
 end
 
+directory "#{theDomain}/flyway/all" do
+  owner node['glassfish']['user']
+  mode "770"
+  action :create
+end
+
+directory "#{theDomain}/flyway/all/sql" do
+  owner node['glassfish']['user']
+  mode "770"
+  action :create
+end
+
+directory "#{theDomain}/flyway/all/undo" do
+  owner node['glassfish']['user']
+  mode "770"
+  action :create
+end

@@ -98,7 +98,10 @@ INSERT INTO hosts(hostname, host_ip) VALUES <%= @hosts %> ON DUPLICATE KEY UPDAT
 
 REPLACE INTO variables(`id`, `value`) VALUES ("elastic_ip", "<%= @elastic_ip %>"), ("spark_dir", "<%= node['hadoop_spark']['dir'] %>/spark"),  ("flink_dir", "<%= node['flink']['dir'] %>/flink"), ("elastic_dir", "<%= node['elastic']['dir'] %>/elastic"),  ("mysql_dir", "<%= node['mysql']['dir'] %>/mysql"), ("ndb_dir", "<%= node['ndb']['dir'] %>/mysql-cluster"), ("hadoop_dir", "<%= node['hops']['dir'] %>/hadoop"), ("hdfs_user", "<%= node['hops']['hdfs']['user'] %>"), ("yarn_user", "<%= node['hops']['yarn']['user'] %>"), ("mr_user","<%= node['hops']['mr']['user'] %>"), ("elastic_user","<%= node['elastic']['user'] %>"), ("hopsworks_dir", "<%= @hopsworks_dir %>");
 
-REPLACE INTO variables(`id`, `value`) VALUES ("yarn_default_quota", "<%= @yarn_default_quota %>"), ("hdfs_default_quota", "<%= @hdfs_default_quota %>"), ("hive_default_quota", "<%= @hive_default_quota %>");
+REPLACE INTO variables(`id`, `value`) VALUES
+  ("yarn_default_quota", "<%= @yarn_default_quota %>"),
+  ("hdfs_default_quota", "<%= node['hopsworks']['hdfs_default_quota_mbs'] %>"),
+  ("hive_default_quota", "<%= node['hopsworks']['hive_default_quota_mbs'] %>");
 
 REPLACE INTO variables(`id`, `value`) VALUES ("max_num_proj_per_user", "<%= node['hopsworks']['max_num_proj_per_user'] %>");
 
@@ -153,12 +156,6 @@ REPLACE INTO variables(`id`, `value`) VALUES ("kafka_ip", "<%= @kafka_ip %>");
 REPLACE INTO variables(`id`, `value`) VALUES ("kafka_num_partitions", "<%= node['hopsworks']['kafka_num_partitions'] %>");
 
 REPLACE INTO variables(`id`, `value`) VALUES ("kafka_num_replicas", "<%= node['hopsworks']['kafka_num_replicas'] %>");
-
-REPLACE INTO variables(`id`, `value`) VALUES ("drelephant_port", "<%= node['drelephant']['port'] %>");
-
-REPLACE INTO variables(`id`, `value`) VALUES ("drelephant_ip", "<%= @drelephant_ip %>");
-
-REPLACE INTO variables(`id`, `value`) VALUES ("drelephant_db", "<%= node['drelephant']['db'] %>");
 
 REPLACE INTO variables(`id`, `value`) VALUES ("hopsworks_master_password", "<%= node['hopsworks']['master']['password'] %>");
 
@@ -233,19 +230,12 @@ REPLACE INTO variables(`id`, `value`) VALUES ("max_gpu_request_size","<%= node['
 REPLACE INTO variables(`id`, `value`) VALUES ("max_cpu_request_size","<%= node['hopsworks']['max_cpu_request_size'] %>");
 
 --
--- kibana, logstash, grafana, graphite
+-- kibana, logstash,
 --
 
 REPLACE INTO variables(`id`, `value`) VALUES ("kibana_ip", "<%= @kibana_ip %>");
 REPLACE INTO variables(`id`, `value`) VALUES ("logstash_ip", "<%= @logstash_ip %>");
 REPLACE INTO variables(`id`, `value`) VALUES ("logstash_port", "<%= @logstash_port %>");
-REPLACE INTO variables(`id`, `value`) VALUES ("grafana_ip", "<%= @grafana_ip %>");
-REPLACE INTO variables(`id`, `value`) VALUES ("influxdb_ip", "<%= @influxdb_ip %>");
-REPLACE INTO variables(`id`, `value`) VALUES ("influxdb_port", "<%= node['influxdb']['http']['port'] %>");
-REPLACE INTO variables(`id`, `value`) VALUES ("influxdb_user", "<%= node['influxdb']['db_user'] %>");
-REPLACE INTO variables(`id`, `value`) VALUES ("influxdb_pw", "<%= node['influxdb']['db_password'] %>");
-REPLACE INTO variables(`id`, `value`) VALUES ("graphite_ip", "<%= @graphite_ip %>");
-REPLACE INTO variables(`id`, `value`) VALUES ("graphite_port", "<%= node['influxdb']['graphite']['port'] %>");
 --
 -- pyspark, python
 --

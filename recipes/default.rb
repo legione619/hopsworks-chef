@@ -45,13 +45,6 @@ rescue
 end
 
 begin
-  drelephant_ip = private_recipe_ip("drelephant","default")
-rescue
-  drelephant_ip = node['hostname']
-  Chef::Log.warn "could not find the dr elephant server ip!"
-end
-
-begin
   dela_ip = private_recipe_ip("dela","default")
 rescue
   dela_ip = node['hostname']
@@ -63,15 +56,6 @@ begin
 rescue
   kibana_ip = node['hostname']
   Chef::Log.warn "could not find the kibana server ip!"
-end
-
-begin
-  grafana_ip = private_recipe_ip("hopsmonitor","default")
-  influxdb_ip = private_recipe_ip("hopsmonitor","default")
-rescue
-  grafana_ip = node['hostname']
-  influxdb_ip = node['hostname']
-  Chef::Log.warn "could not find the hopsmonitor server ip!"
 end
 
 begin
@@ -257,15 +241,9 @@ for version in versions do
          :hopsworks_dir => theDomain,
          :hops_rpc_tls => hops_rpc_tls_val,
          :yarn_default_quota => node['hopsworks']['yarn_default_quota_mins'].to_i * 60,
-         :hdfs_default_quota => node['hopsworks']['hdfs_default_quota_mbs'].to_i,
-         :hive_default_quota => node['hopsworks']['hive_default_quota_mbs'].to_i,
-         :featurestore_default_quota => node['hopsworks']['featurestore_default_quota_mbs'].to_i,
          :java_home => node['java']['java_home'],
-         :drelephant_ip => drelephant_ip,
          :kibana_ip => kibana_ip,
          :python_kernel => python_kernel,
-         :grafana_ip => grafana_ip,
-         :influxdb_ip => influxdb_ip,
          :public_ip => public_ip,
          :dela_ip => dela_ip,
          :krb_ldap_auth => node['ldap']['enabled'].to_s == "true" || node['kerberos']['enabled'].to_s == "true",
@@ -277,6 +255,23 @@ for version in versions do
   template "#{theDomain}/flyway/dml/undo/U#{version}__undo.sql" do
     source "sql/dml/undo/#{version}__undo.sql.erb"
     owner node['glassfish']['user']
+    mode 0750
+    action :create
+  end
+
+   # template all the ddl files from all versions
+   cookbook_file "#{theDomain}/flyway/all/sql/V#{version}__hopsworks.sql" do
+    source "sql/ddl/updates/#{version}.sql"
+    owner node['glassfish']['user']
+    group node['glassfish']['group']
+    mode 0750
+    action :create
+  end
+
+  cookbook_file "#{theDomain}/flyway/all/undo/U#{version}__undo.sql" do
+    source "sql/ddl/updates/undo/#{version}__undo.sql"
+    owner node['glassfish']['user']
+    group node['glassfish']['group']
     mode 0750
     action :create
   end
@@ -622,7 +617,7 @@ if exists_local("hops_airflow", "default")
     not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-jdbc-resources | grep 'jdbc/airflow$'"
   end
 end
-  
+
 # Drop Existing featureStore connection pool and recreate it
 glassfish_asadmin "delete-jdbc-connection-pool --cascade featureStorePool" do
   domain_name domain_name
@@ -850,7 +845,7 @@ hopsworks_mail "gmail" do
 end
 
 node.override['glassfish']['asadmin']['timeout'] = 400
-  
+
 if node['install']['enterprise']['install'].casecmp? "true" and exists_local("cloud", "default")
   unmanaged = false
   if node.attribute? 'cloud' and node['cloud'].attribute? 'init' and node['cloud']['init'].attribute? 'config' and node['cloud']['init']['config'].attribute? 'unmanaged'
@@ -1204,6 +1199,15 @@ kagent_keys "#{homedir}" do
   action :return_publickey
 end
 
+registry_addr = { :registry_addr => consul_helper.get_service_fqdn("registry") + ":#{node['hops']['docker']['registry']['port']}"}
+kagent_sudoers "dockerImage" do
+  user          node['glassfish']['user']
+  group         "root"
+  script_name   "dockerImage.sh"
+  template      "dockerImage.sh.erb"
+  variables     registry_addr
+  run_as        "ALL" # run this as root - inside we change to different users
+end
 
 #
 # Rstudio
