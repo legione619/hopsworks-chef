@@ -146,7 +146,7 @@ end
 #update hive group
 group node['hive2']['group'] do
   action :modify
-  members  ["#{node['sqoop']['user']}",#{node['hops']['hdfs']['user']},"#{node['airflow']['user']}"]
+  members  ["#{node['sqoop']['user']}","#{node['hops']['hdfs']['user']}","#{node['airflow']['user']}"]
   append true
   not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
