@@ -722,7 +722,7 @@ if node['hopsworks']['http_logs']['enabled'].eql? "true"
     if node['hopsworks']['systemd'] == "true"
       command "systemd-cat #{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh"
     else #sysv
-      command "#{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh >> #{domains_dir}/#{domain_name}/logs/web_dumper.log 2>&1"
+      command "##{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh >> #{domains_dir}/#{domain_name}/logs/web_dumper.log 2>&1"
     end
     user node['glassfish']['user']
     minute '0'
