@@ -4,7 +4,7 @@ maintainer_email "jdowling@kth.se"
 license          "Apache v2.0"
 description      "Installs/Configures HopsWorks, the UI for Hops Hadoop."
 long_description IO.read(File.join(File.dirname(__FILE__), 'README.md'))
-version          "2.1.0"
+version          "2.2.0"
 source_url       "https://github.com/logicalclocks/hopsworks-chef"
 
 
@@ -40,6 +40,7 @@ depends 'consul'
 depends 'ulimit'
 depends 'glassfish'
 depends 'kube-hops'
+depends 'onlinefs'
 
 
 recipe  "hopsworks::install", "Installs Glassfish"
@@ -768,11 +769,18 @@ attribute "oauth/enabled",
 attribute "oauth/redirect_uri",
           :description => "OAuth redirect uri. 'hopsworks/callback' (default)",
           :type => 'string'
+attribute "oauth/logout_redirect_uri",
+          :description => "OAuth logout redirect uri. 'hopsworks/' (default)",
+          :type => 'string'
 attribute "oauth/account_status",
           :description => "Hopsworks account status given for new OAuth user. '1' verified account (default)",
           :type => 'string'
 attribute "oauth/group_mapping",
           :description => "OAuth group to hopsworks group mappings. Format: (groupA-> HOPS_USER,HOPS_ADMIN;groupB->HOPS_USER)",
+          :type => 'string'
+
+attribute "remote_auth/need_consent",
+          :description => "Remote user need to consent on first login. 'true' (default)",
           :type => 'string'
 
 attribute "hopsworks/disable_password_login",
@@ -828,6 +836,10 @@ attribute "hopsworks/pypi_rest_endpoint",
           :description => "Url to PyPi REST API to query package information",
           :type => 'string'
 
+attribute "hopsworks/python_library_updates_monitor_interval",
+          :description => "Interval for monitoring new releases for libraries",
+          :type => 'string'
+
 ### TensorBoard
 
 attribute "hopsworks/tensorboard_max_last_accessed",
@@ -841,7 +853,7 @@ attribute "hopsworks/jwt/signature_algorithm",
           :type => 'string'
 
 attribute "hopsworks/jwt/lifetime_ms",
-          :description => "Default lifetime in ms for jwt expiration. (default 2.1.000)",
+          :description => "Default lifetime in ms for jwt expiration. (default 2.2.000)",
           :type => 'string'
 
 attribute "hopsworks/jwt/exp_leeway_sec",
@@ -900,6 +912,10 @@ attribute "featurestore/user",
 attribute "featurestore/password",
           :description => "Password for the JDBC Connection to the the Online FeatureStore"
 
+attribute "featurestore/job_activity_timer",
+          :description => "How often to run the timer to backfill jobs for feature groups and training datasets - default 5 minutes",
+          :type => 'string'
+
 # hops-util-py
 attribute "hopsworks/requests_verify",
           :description => "Whether to verify http(s) requests in hops-util-py",
@@ -949,10 +965,6 @@ attribute "hopsworks/hdfs/storage_policy/base",
 attribute "hopsworks/hdfs/storage_policy/log",
           :description => "Set the project LOG_DIR storage policy. Default is HOT. Accepted values: CLOUD/DB/HOT",
           :type => 'string'
-# enable/disable metadata designer
-attribute "hopsworks/enable_metadata_designer",
-          :description => "Enable metadata designer. 'false' (default)",
-          :type => 'string'
 
 # Expat
 attribute "hopsworks/expat_url",
@@ -963,3 +975,24 @@ attribute "hopsworks/expat_url",
 attribute "tensorboard/max/reload/threads",
           :description => "The max number of threads that TensorBoard can use to reload runs. Not relevant for db read-only mode. Each thread reloads one run at a time.",
           :type => "string"
+
+#Azure CA cert download url
+attribute "hopsworks/azure-ca-cert/download-url",
+          :description => "Azure CA cert download url. 'https://cacerts.digicert.com/DigiCertGlobalRootG2.crt' (default)",
+          :type => "string"
+
+attribute "hopsworks/livy_startup_timeout",
+          :description => "timeout for livy sessions startup",
+          :type => "string"
+# Docker job
+attribute "hopsworks/docker-job/docker_job_mounts_list",
+					:description => "Host path directories that can be mounted with Docker jobs",
+					:type => "string"
+
+attribute "hopsworks/docker-job/docker_job_mounts_allowed",
+					:description => "Enable or disable mounting host paths with Docker jobs",
+					:type => "string"
+
+attribute "hopsworks/docker-job/docker_job_uid_strict",
+					:description => "Enable or disable strict mode for uig/gid of docker jobs. In strict mode, users cannot set the uid/gid of the job.",
+					:type => "string"

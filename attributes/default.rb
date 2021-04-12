@@ -13,6 +13,7 @@ include_attribute "hive2"
 include_attribute "hops"
 include_attribute "hops_airflow"
 include_attribute "kube-hops"
+include_attribute "onlinefs"
 
 default['hopsworks']['version']                  = node['install']['version']
 default['hopsworks']['current_version']          = node['install']['current_version']
@@ -80,6 +81,9 @@ default['hopsworks']['download_url']             = "#{node['install']['enterpris
 default['hopsworks']['war_url']                  = "#{node['hopsworks']['download_url']}/hopsworks-web.war"
 default['hopsworks']['ca_url']                   = "#{node['hopsworks']['download_url']}/hopsworks-ca.war"
 default['hopsworks']['ear_url']                  = "#{node['hopsworks']['download_url']}/hopsworks-ear#{node['install']['kubernetes'].casecmp?("true") ? "-kube" : ""}.ear"
+
+# Currently we don't have an enterprise version of the new frontend. So the download url is the same for both community and enterprise 
+default['hopsworks']['frontend_url']             = "#{node['download_url']}/hopsworks/frontend/#{node['hopsworks']['version']}/frontend.tgz"
 
 default['hopsworks']['logsize']                  = "200000000"
 
@@ -265,6 +269,9 @@ default['tensorboard']['max']['reload']['threads']          = "1"
 # PyPi
 #
 default['hopsworks']['pypi_rest_endpoint']             = "https://pypi.org/pypi/{package}/json"
+default['hopsworks']['pypi_indexer_timer_interval']    = "1d"
+default['hopsworks']['pypi_simple_endpoint']           = "https://pypi.org/simple/"
+default['hopsworks']['python_library_updates_monitor_interval']    = "1d"
 
 # Hive
 
@@ -341,8 +348,11 @@ default['ldap']['group_mapping_sync_interval']       = 0
 # OAuth2
 default['oauth']['enabled']                          = "false"
 default['oauth']['redirect_uri']                     = "hopsworks/callback"
+default['oauth']['logout_redirect_uri']              = "hopsworks/"
 default['oauth']['account_status']                   = 1
 default['oauth']['group_mapping']                    = ""
+
+default['remote_auth']['need_consent']               = "true"
 
 default['hopsworks']['disable_password_login']       = "false"
 default['hopsworks']['disable_registration']         = "false"
@@ -410,10 +420,11 @@ default['hopsworks']['kagent_liveness']['threshold']       = "10s"
 # Online FeatureStore JDBC Connection Details
 #
 
-default['featurestore']['jdbc_url']           = "jdbc:mysql://onlinefs.mysql.service.#{node['consul']['domain']}:#{node['ndb']['mysql_port']}/"
-default['featurestore']['hopsworks_url']      = "jdbc:mysql://127.0.0.1:#{node['ndb']['mysql_port']}/"
-default['featurestore']['user']               = node['mysql']['user']
-default['featurestore']['password']           = node['mysql']['password']
+default['featurestore']['jdbc_url']             = "jdbc:mysql://onlinefs.mysql.service.#{node['consul']['domain']}:#{node['ndb']['mysql_port']}/"
+default['featurestore']['hopsworks_url']        = "jdbc:mysql://127.0.0.1:#{node['ndb']['mysql_port']}/"
+default['featurestore']['user']                 = node['mysql']['user']
+default['featurestore']['password']             = node['mysql']['password']
+default['featurestore']['job_activity_timer']   = "5m"
 
 # hops-util-py
 default['hopsworks']['requests_verify']       = node['hops']['tls']['enabled']
@@ -440,5 +451,14 @@ default['hopsworks']['hdfs']['storage_policy']['base']        = "DB"
 # To not fill the SSDs with Logs files that nobody access frequently we set the StoragePolicy for the LOGS dir to be default HOT
 default['hopsworks']['hdfs']['storage_policy']['log']         = "HOT"
 
-default['hopsworks']['enable_metadata_designer']              = "false"
 default["hopsworks"]['check_nodemanager_status']              = "false"
+
+default['hopsworks']['azure-ca-cert']['download-url']         = "https://cacerts.digicert.com/DigiCertGlobalRootG2.crt"
+
+#livy
+default['hopsworks']['livy_startup_timeout']           = "240"
+
+# Docker job
+default['hopsworks']['docker-job']['docker_job_mounts_list']    = ""
+default['hopsworks']['docker-job']['docker_job_mounts_allowed'] = "false"
+default['hopsworks']['docker-job']['docker_job_uid_strict'] = "true"

@@ -1,3 +1,6 @@
+require 'digest'
+require 'securerandom'
+
 include_recipe "java"
 
 Chef::Recipe.send(:include, Hops::Helpers)
@@ -96,7 +99,6 @@ end
 
 hopsworks_grants "timers_tables" do
   tables_path  "#{timerTablePath}"
-  rows_path  ""
   action :nothing
 end
 
@@ -222,6 +224,10 @@ unless node['install']['cloud'].strip.empty?
   node.override['hopsworks']['reserved_project_names'] = "#{node['hopsworks']['reserved_project_names']},cloud"
 end
 
+# encrypt onlinefs user password
+onlinefs_salt = SecureRandom.base64(64)
+encrypted_onlinefs_password = Digest::SHA256.hexdigest node['onlinefs']['hopsworks']['password'] + onlinefs_salt
+
 for version in versions do
   # Template DML files
   template "#{theDomain}/flyway/dml/V#{version}__hopsworks.sql" do
@@ -247,7 +253,9 @@ for version in versions do
          :public_ip => public_ip,
          :dela_ip => dela_ip,
          :krb_ldap_auth => node['ldap']['enabled'].to_s == "true" || node['kerberos']['enabled'].to_s == "true",
-         :hops_version => get_hops_version(node['hops']['version'])
+         :hops_version => get_hops_version(node['hops']['version']),
+         :onlinefs_password => encrypted_onlinefs_password,
+         :onlinefs_salt => onlinefs_salt
     })
     action :create
   end
@@ -394,8 +402,8 @@ ruby_block "export_hadoop_classpath" do
   action :create
 end
 
-hopsworks_grants "restart_glassfish" do
-  action :reload_systemd
+kagent_config "glassfish-domain1" do 
+  action :systemd_reload
 end
 
 glassfish_secure_admin domain_name do
@@ -512,7 +520,7 @@ glassfish_conf = {
   # Jobs in Hopsworks use the Timer service
   'server-config.ejb-container.ejb-timer-service.timer-datasource' => 'jdbc/hopsworksTimers',
   'server.ejb-container.ejb-timer-service.property.reschedule-failed-timer' => node['glassfish']['reschedule_failed_timer'],
-  'server.http-service.virtual-server.server.property.send-error_1' => "\"code=404 path=#{domains_dir}/#{domain_name}/docroot/404.html reason=Resource_not_found\"",
+  'server.http-service.virtual-server.server.property.send-error_1' => "\"code=404 path=#{domains_dir}/#{domain_name}/docroot/index.html reason=Resource_not_found\"",
   # Enable/Disable HTTP listener
   'configs.config.server-config.network-config.network-listeners.network-listener.http-listener-1.enabled' => false,
   # Make sure the https listener is listening on the requested port
@@ -521,14 +529,23 @@ glassfish_conf = {
   'server.network-config.protocols.protocol.http-listener-2.ssl.ssl3-enabled' => false,
   'server.network-config.protocols.protocol.sec-admin-listener.ssl.ssl3-enabled' => false,
   'server.network-config.protocols.protocol.https-internal.ssl.ssl3-enabled' => false,
+  'server.admin-service.jmx-connector.system.ssl.ssl3-enabled' => false,
+  'server.iiop-service.iiop-listener.SSL.ssl.ssl3-enabled' => false,
+  'server.iiop-service.iiop-listener.SSL_MUTUALAUTH.ssl.ssl3-enabled' => false,
   # Disable TLS 1.0
   'server.network-config.protocols.protocol.http-listener-2.ssl.tls-enabled' => false,
   'server.network-config.protocols.protocol.sec-admin-listener.ssl.tls-enabled' => false,
   'server.network-config.protocols.protocol.https-internal.ssl.tls-enabled' => false,
+  'server.admin-service.jmx-connector.system.ssl.tls-enabled' => false,
+  'server.iiop-service.iiop-listener.SSL.ssl.tls-enabled' => false,
+  'server.iiop-service.iiop-listener.SSL_MUTUALAUTH.ssl.tls-enabled' => false,
   # Restrict ciphersuite
   'configs.config.server-config.network-config.protocols.protocol.http-listener-2.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
   'configs.config.server-config.network-config.protocols.protocol.sec-admin-listener.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
   'configs.config.server-config.network-config.protocols.protocol.https-internal.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
+  'server.admin-service.jmx-connector.system.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
+  'server.iiop-service.iiop-listener.SSL.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
+  'server.iiop-service.iiop-listener.SSL_MUTUALAUTH.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
   # Set correct thread-priority for the executor services - required during updates
   'resources.managed-executor-service.concurrent\/hopsExecutorService.thread-priority' => 10,
   'resources.managed-thread-factory.concurrent\/hopsThreadFactory.thread-priority' => 10,
@@ -920,6 +937,35 @@ glassfish_deployable "hopsworks-ca" do
 end
 
 
+# Deploy the new react frontend - clean the directory from the previous version
+directory "#{theDomain}/docroot" do
+  recursive true
+  action :delete
+end
+
+directory "#{theDomain}/docroot" do
+  owner node['hopsworks']['user']
+  group node['hopsworks']['group']
+  mode "770"
+  action :create
+end
+
+remote_file "#{Chef::Config['file_cache_path']}/frontend.tgz" do
+  source node['hopsworks']['frontend_url']
+  user node['glassfish']['user']
+  group node['glassfish']['group']
+  mode 0755
+  action :create
+end
+
+bash "extract_frontend" do
+  user node['hopsworks']['user']
+  group node['hopsworks']['group']
+  code <<-EOH
+    tar xf #{Chef::Config['file_cache_path']}/frontend.tgz -C #{theDomain}/docroot
+  EOH
+end
+
 #
 # If deployment of the new version succeeds, then undeploy the previous version
 #
@@ -963,18 +1009,11 @@ template "/bin/hopsworks-2fa" do
     owner "root"
     mode 0700
     action :create
- end
+end
 
 hopsworks_certs "generate-certs" do
   action :generate
 end
-
-# Since Hopsworks v1.1 we don't need the symlink
-link "delete-crl-symlink" do
-  target_file "#{domains_dir}/#{domain_name}/docroot/intermediate.crl.pem"
-  action :delete
-end
-
 
 template "#{::Dir.home(node['hopsworks']['user'])}/.condarc" do
   source "condarc.erb"
@@ -1132,8 +1171,8 @@ ruby_block "generate_service_jwt" do
 end
 
 # Force variables reload
-hopsworks_grants "restart_glassfish" do
-  action :reload_systemd
+kagent_config "glassfish-domain1" do 
+  action :systemd_reload
 end
 
 hopsworks_certs "generate-int-certs" do
@@ -1142,11 +1181,15 @@ hopsworks_certs "generate-int-certs" do
   not_if      (::File.exist?("#{node['hopsworks']['config_dir']}/internal_bundle.crt"))
 end
 
-# Force reload of the certificate
-hopsworks_grants "restart_glassfish" do
-  action :reload_systemd
+hopsworks_certs "download_azure_ca_cert" do
+  action      :download_azure_ca_cert
+  not_if      (::File.exist?("/tmp/DigiCertGlobalRootG2.crt"))
 end
 
+# Force reload of the certificate
+kagent_config "glassfish-domain1" do 
+  action :systemd_reload
+end
 
 # Register Glassfish with Consul
 template "#{node['glassfish']['domains_dir']}/#{node['hopsworks']['domain_name']}/bin/glassfish-health.sh" do
