@@ -7,8 +7,8 @@
     </expat>
 
     <database>
-        <url>jdbc:mysql://<%= @mysql_ip %>/hopsworks</url>
-        <driver>com.mysql.jdbc.Driver</driver>
+        <url>jdbc:mysql://127.0.0.1/hopsworks</url>
+        <driver>com.mysql.cj.jdbc.Driver</driver>
         <user><%= node['mysql']['user'] %></user>
         <password><%= node['mysql']['password'] %></password>
     </database>
@@ -95,4 +95,12 @@
     <version-12>
         io.hops.hopsworks.expat.migrations.metadata.UpdateMetadata
     </version-12>
+    <version-13>
+        io.hops.hopsworks.expat.migrations.projects.search.featurestore.UpdateFeaturegroupsForSearch
+        io.hops.hopsworks.expat.migrations.projects.search.featurestore.UpdateTrainingdatasetsForSearch
+    </version-13>
+    <version-14>
+        io.hops.hopsworks.expat.migrations.conda.DockerConda
+        io.hops.hopsworks.expat.migrations.dataset.FixDatasetPermission
+    </version-14>
 </expat>

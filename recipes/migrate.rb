@@ -34,7 +34,6 @@ remote_file "#{node['hopsworks']['expat_dir']}/lib/mysql-connector-java.jar" do
   action :create
 end
 
-mysql_ip = private_recipe_ip("ndb", "mysqld")
 kibana_url = get_kibana_url()
 elastic_url = any_elastic_url()
 hopsworks_url = "https://#{private_recipe_ip("hopsworks", "default")}:#{node['hopsworks']['https']['port']}"
@@ -44,7 +43,6 @@ template "#{node['hopsworks']['expat_dir']}/etc/expat-site.xml" do
   owner 'root'
   mode '0750'
   variables ({
-    :mysql_ip => mysql_ip,
     :kibana_url => kibana_url,
     :hopsworks_url => hopsworks_url,
     :hopsworks_service_jwt => serviceJwt,
@@ -56,7 +54,8 @@ end
 bash 'run-expat' do
   user "root"
   environment ({'HADOOP_HOME' => node['hops']['base_dir'],
-                'HOPSWORKS_EAR_HOME' => "#{node['hopsworks']['domains_dir']}/#{node['hopsworks']['domain_name']}/applications/hopsworks-ear~#{node['install']['version']}"}) 
+                'HADOOP_USER_NAME' => node['hops']['hdfs']['user'],
+                'HOPSWORKS_EAR_HOME' => "#{node['hopsworks']['domains_dir']}/#{node['hopsworks']['domain_name']}/applications/hopsworks-ear~#{node['install']['version']}"})
   code <<-EOH
     #{node['hopsworks']['expat_dir']}/bin/expat -a migrate -v #{node['install']['version']}
   EOH
@@ -66,7 +65,7 @@ end
 bash "set_project_storage_type" do
   user node['hops']['hdfs']['user']
   code <<-EOH
-    #{node['hops']['bin_dir']}/hdfs storagepolicies -setStoragePolicy -path /Projects -policy DB 
+    #{node['hops']['bin_dir']}/hdfs storagepolicies -setStoragePolicy -path /Projects -policy DB
   EOH
   action :run
   only_if "#{node['hops']['bin_dir']}/hdfs dfs -test -d /Projects"

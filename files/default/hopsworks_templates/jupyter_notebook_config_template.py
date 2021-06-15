@@ -1,7 +1,7 @@
 c = get_config()
 c.HDFSContentsManager.hdfs_namenode_host='${conf.namenodeIp}'
 c.HDFSContentsManager.hdfs_namenode_port=${conf.namenodePort}
-c.HDFSContentsManager.root_dir='/Projects/${conf.project.name}${conf.baseDirectory}'
+c.HDFSContentsManager.root_dir='${conf.baseDirectory}'
 c.HDFSContentsManager.hdfs_user = '${conf.hdfsUser}'
 c.HDFSContentsManager.hadoop_client_env_opts = '-D fs.permissions.umask-mode=0002'
 
@@ -47,10 +47,14 @@ os.environ['REST_ENDPOINT'] = "${conf.hopsworksEndpoint}"
 os.environ['ELASTIC_ENDPOINT'] = "${conf.elasticEndpoint}"
 os.environ['HADOOP_USER_NAME'] = "${conf.hdfsUser}"
 os.environ['JUPYTER_CERTS_DIR'] = "${conf.jupyterCertsDirectory}"
-os.environ['HOPSWORKS_PROJECT_ID'] = "${conf.project.id}"
+os.environ['HOPSWORKS_PROJECT_ID'] = "${conf.project.id?c}"
 os.environ['REQUESTS_VERIFY'] = "${conf.requestsVerify?c}"
-os.environ['DOMAIN_CA_TRUSTSTORE_PEM'] = "${conf.domainCATruststorePem}"
+os.environ['DOMAIN_CA_TRUSTSTORE'] = "${conf.domainCATruststore}"
 os.environ['HADOOP_HOME'] = "${conf.hadoopHome}"
+os.environ['SERVICE_DISCOVERY_DOMAIN'] = "${conf.serviceDiscoveryDomain}"
 
 c.GitHandlersConfiguration.api_key = "${conf.apiKey}"
+c.GitHandlersConfiguration.git_backend = "${conf.gitBackend}"
 os.environ['FLINK_CONF_DIR'] = "${conf.flinkConfDirectory}"
+os.environ['FLINK_LIB_DIR'] = "${conf.flinkLibDirectory}"
+os.environ['HADOOP_CLASSPATH_GLOB'] = "${conf.hadoopClasspathGlob}"

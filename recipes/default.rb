@@ -1,8 +1,14 @@
+require 'digest'
+require 'securerandom'
+
 include_recipe "java"
+
+Chef::Recipe.send(:include, Hops::Helpers)
+Chef::Resource.send(:include, Hops::Helpers)
 
 domain_name= node['hopsworks']['domain_name']
 domains_dir = node['hopsworks']['domains_dir']
-# This is set correctly in hopsworks::install by the chef-glassfish recipe. As each recipe has it's own 
+# This is set correctly in hopsworks::install by the chef-glassfish recipe. As each recipe has it's own
 # instance of chef we need to re-set it here.
 # If you set it in the attributes it will break glassfish installation.
 node.override['glassfish']['install_dir'] = "#{node['glassfish']['install_dir']}/glassfish/versions/current"
@@ -35,80 +41,10 @@ rescue
 end
 
 begin
-  spark_history_server_ip = private_recipe_ip("hadoop_spark","historyserver")
-rescue
-  spark_history_server_ip = node['hostname']
-  Chef::Log.warn "could not find the spark history server ip for HopsWorks!"
-end
-
-begin
   jhs_ip = private_recipe_ip("hops","jhs")
 rescue
   jhs_ip = node['hostname']
   Chef::Log.warn "could not find the MR job history server ip!"
-end
-
-begin
-  rm_ip = private_recipe_ip("hops","rm")
-rescue
-  rm_ip = node['hostname']
-  Chef::Log.warn "could not find the Resource Manager ip!"
-end
-
-begin
-  rm_port = node['hops']['rm']['http_port']
-rescue
-  rm_port = 8088
-  Chef::Log.warn "could not find the Resource Manager Port!"
-end
-
-begin
-  logstash_ip = private_recipe_ip("hopslog","default")
-rescue
-  logstash_ip = node['hostname']
-  Chef::Log.warn "could not find the Logstash ip!"
-end
-
-begin
-  logstash_port = node['logstash']['http']['port']
-rescue
-  logstash_port = 3456
-  Chef::Log.warn "could not find the Logstash Port!"
-end
-
-begin
-  livy_ip = private_recipe_ip("livy","default")
-rescue
-  livy_ip = node['hostname']
-  Chef::Log.warn "could not find livy server ip!"
-end
-
-begin
-  epipe_ip = private_recipe_ip("epipe","default")
-rescue
-  epipe_ip = node['hostname']
-  Chef::Log.warn "could not find th epipe server ip!"
-end
-
-begin
-  zk_ip = private_recipe_ip("kzookeeper","default")
-rescue
-  zk_ip = node['hostname']
-  Chef::Log.warn "could not find th zk server ip!"
-end
-
-begin
-  kafka_ip = private_recipe_ip("kkafka","default")
-rescue
-  kafka_ip = node['hostname']
-  Chef::Log.warn "could not find the kafka server ip!"
-end
-
-begin
-  drelephant_ip = private_recipe_ip("drelephant","default")
-rescue
-  drelephant_ip = node['hostname']
-  Chef::Log.warn "could not find the dr elephant server ip!"
 end
 
 begin
@@ -122,23 +58,7 @@ begin
   kibana_ip = private_recipe_ip("hopslog","default")
 rescue
   kibana_ip = node['hostname']
-  Chef::Log.warn "could not find the logstash server ip!"
-end
-
-begin
-  grafana_ip = private_recipe_ip("hopsmonitor","default")
-  influxdb_ip = private_recipe_ip("hopsmonitor","default")
-rescue
-  grafana_ip = node['hostname']
-  influxdb_ip = node['hostname']
-  Chef::Log.warn "could not find the hopsmonitor server ip!"
-end
-
-begin
-  hiveserver_ip = private_recipe_ip("hive2","default")
-rescue
-  hiveserver_ip = node['hostname']
-  Chef::Log.warn "could not find the Hive server ip!"
+  Chef::Log.warn "could not find the kibana server ip!"
 end
 
 begin
@@ -157,6 +77,14 @@ bash 'create_hopsworks_db' do
   code <<-EOF
       set -e
       #{exec} -e \"CREATE DATABASE IF NOT EXISTS #{node['hopsworks']['db']} CHARACTER SET latin1\"
+      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\' IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']}\';\"
+      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hopsworks']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hops']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      # Hopsworks needs to the quotas tables
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.yarn_projects_quota TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.hdfs_directory_with_quota_feature TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON metastore.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
     EOF
 end
 
@@ -171,7 +99,6 @@ end
 
 hopsworks_grants "timers_tables" do
   tables_path  "#{timerTablePath}"
-  rows_path  ""
   action :nothing
 end
 
@@ -190,18 +117,7 @@ dns = Resolv::DNS.new
 hosts = ""
 
 for h in node['kagent']['default']['private_ips']
-
-  # Try and resolve hostname first using /etc/hosts, then use DNS
-  begin
-    hname = hostf.getname(h)
-  rescue
-    begin
-      hname = dns.getname(h)
-    rescue
-      raise "Cannot resolve the hostname for IP address: #{h}"
-    end
-  end
-
+  hname = resolve_hostname(h)
   hosts += "('" + hname.to_s + "','" + h + "')" + ","
 end
 if h.length > 0
@@ -224,26 +140,10 @@ if node['conda']['channels']['default_mirrors'].empty? == false
    condaRepo = repos[0]
 end
 
-nonconda_hosts_list = []
-if node['hopsworks']['nonconda_hosts'].empty? == false
-  nonconda_hosts_list = node['hopsworks']['nonconda_hosts'].split(/\s*,\s*/)
-end
-
-mysql_host = private_recipe_ip("ndb","mysqld")
-
-featurestore_jdbc_url = node['featurestore']['jdbc_url']
-featurestore_jdbc_url_escaped = featurestore_jdbc_url.gsub(':', '\\\\:')
-# In case of an upgrade, attribute-driven-domain will not run but we still need to configure
-# connection pool for the online featurestore
-if node['featurestore']['jdbc_url'].eql? "localhost"
-  featurestore_jdbc_url="jdbc:mysql://#{mysql_host}:#{node['ndb']['mysql_port']}/"
-  featurestore_jdbc_url_escaped="\"jdbc\\:mysql\\://#{mysql_host}\\:#{node['ndb']['mysql_port']}/\""
-end
-
 # hops-util-py only works for localhost installations if you disable TLS hostname validations
 if node['install']['localhost'].eql? "true"
   node.override['hopsworks']['requests_verify'] = "false"
-end  
+end
 
 
 # Hive metastore should be created before the hopsworks tables are created
@@ -259,6 +159,7 @@ current_version = node['hopsworks']['current_version']
 if node['install']['enterprise']['install'].casecmp? "true"
   file_name = "clients.tar.gz"
   client_dir = "#{node['install']['dir']}/clients-#{node['hopsworks']['version']}"
+  node.override['hopsworks']['client_path'] = client_dir
 
   directory client_dir do
     owner node['glassfish']['user']
@@ -268,9 +169,8 @@ if node['install']['enterprise']['install'].casecmp? "true"
     recursive true
   end
 
-  node.override['hopsworks']['client_path']="#{client_dir}/#{file_name}"
   source = "#{node['install']['enterprise']['download_url']}/remote_clients/#{node['hopsworks']['version']}/#{file_name}"
-  remote_file "#{node['hopsworks']['client_path']}" do
+  remote_file "#{node['hopsworks']['client_path']}/#{file_name}" do
     user node['glassfish']['user']
     group node['glassfish']['group']
     source source
@@ -279,12 +179,22 @@ if node['install']['enterprise']['install'].casecmp? "true"
     mode 0555
     action :create_if_missing
   end
+
+  bash "extract clients jar" do
+    user node['glassfish']['user']
+    group node['glassfish']['group']
+    cwd client_dir
+    code <<-EOF
+      tar xf #{file_name}
+    EOF
+    not_if { ::Dir.exists?("#{client_dir}/client")}
+  end
 end
 
 if current_version.eql?("")
 
   # Make sure the database is actually empty. Otherwise raise an error
-  ruby_block "check_db_empty" do 
+  ruby_block "check_db_empty" do
     block do
       raise "You are trying to initialize the database, but the database is not empty. Either there is a failed migration, or you forgot to set the current_version attribute"
     end
@@ -324,6 +234,10 @@ unless node['install']['cloud'].strip.empty?
   node.override['hopsworks']['reserved_project_names'] = "#{node['hopsworks']['reserved_project_names']},cloud"
 end
 
+# encrypt onlinefs user password
+onlinefs_salt = SecureRandom.base64(64)
+encrypted_onlinefs_password = Digest::SHA256.hexdigest node['onlinefs']['hopsworks']['password'] + onlinefs_salt
+
 for version in versions do
   # Template DML files
   template "#{theDomain}/flyway/dml/V#{version}__hopsworks.sql" do
@@ -334,14 +248,7 @@ for version in versions do
          :user_cert_valid_days => node['hopsworks']['cert']['user_cert_valid_days'],
          :conda_repo => condaRepo,
          :hosts => hosts,
-         :epipe_ip => epipe_ip,
-         :livy_ip => livy_ip,
          :jhs_ip => jhs_ip,
-         :rm_ip => rm_ip,
-         :rm_port => rm_port,
-         :logstash_ip => logstash_ip,
-         :logstash_port => logstash_port,
-         :spark_history_server_ip => spark_history_server_ip,
          :hopsworks_ip => hopsworks_ip,
          :elastic_ip => elastic_ips,
          :yarn_ui_ip => public_recipe_ip("hops","rm"),
@@ -350,24 +257,15 @@ for version in versions do
          :hopsworks_dir => theDomain,
          :hops_rpc_tls => hops_rpc_tls_val,
          :yarn_default_quota => node['hopsworks']['yarn_default_quota_mins'].to_i * 60,
-         :hdfs_default_quota => node['hopsworks']['hdfs_default_quota_mbs'].to_i,
-         :hive_default_quota => node['hopsworks']['hive_default_quota_mbs'].to_i,
-         :featurestore_default_quota => node['hopsworks']['featurestore_default_quota_mbs'].to_i,
-         :zk_ip => zk_ip,
          :java_home => node['java']['java_home'],
-         :drelephant_ip => drelephant_ip,
-         :kafka_ip => kafka_ip,
          :kibana_ip => kibana_ip,
          :python_kernel => python_kernel,
-         :grafana_ip => grafana_ip,
-         :influxdb_ip => influxdb_ip,
          :public_ip => public_ip,
          :dela_ip => dela_ip,
-         :hivessl_hostname => hiveserver_ip + ":#{node['hive2']['portssl']}",
-         :hiveext_hostname => hiveserver_ip + ":#{node['hive2']['port']}",
-         :nonconda_hosts_list => nonconda_hosts_list,
          :krb_ldap_auth => node['ldap']['enabled'].to_s == "true" || node['kerberos']['enabled'].to_s == "true",
-         :featurestore_jdbc_url => featurestore_jdbc_url
+         :hops_version => get_hops_version(node['hops']['version']),
+         :onlinefs_password => encrypted_onlinefs_password,
+         :onlinefs_salt => onlinefs_salt
     })
     action :create
   end
@@ -375,6 +273,23 @@ for version in versions do
   template "#{theDomain}/flyway/dml/undo/U#{version}__undo.sql" do
     source "sql/dml/undo/#{version}__undo.sql.erb"
     owner node['glassfish']['user']
+    mode 0750
+    action :create
+  end
+
+   # template all the ddl files from all versions
+   cookbook_file "#{theDomain}/flyway/all/sql/V#{version}__hopsworks.sql" do
+    source "sql/ddl/updates/#{version}.sql"
+    owner node['glassfish']['user']
+    group node['glassfish']['group']
+    mode 0750
+    action :create
+  end
+
+  cookbook_file "#{theDomain}/flyway/all/undo/U#{version}__undo.sql" do
+    source "sql/ddl/updates/undo/#{version}__undo.sql"
+    owner node['glassfish']['user']
+    group node['glassfish']['group']
     mode 0750
     action :create
   end
@@ -427,11 +342,12 @@ begin
     user "root"
     code <<-EOF
       set -e
-      #{exec} -e \"CREATE USER IF NOT EXISTS #{node['hopsworks']['mysql']['user']['kafka']} IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']['kafka']}\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['hopsworks']['mysql']['user']['kafka']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['hopsworks']['mysql']['user']['kafka']}\'@\'%\'\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['hopsworks']['mysql']['user']['kafka']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['hopsworks']['mysql']['user']['kafka']}\'@\'%\';\"
+      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['kkafka']['mysql']['user']}\'@\'%\' IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
+      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'%\'\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
     EOF
   end
 rescue
@@ -486,8 +402,18 @@ ruby_block "export_hadoop_classpath" do
   action :create
 end
 
-hopsworks_grants "restart_glassfish" do
-  action :reload_systemd
+ruby_block "export_hadoop_classpath" do
+  block do
+    file = Chef::Util::FileEdit.new("/lib/systemd/system/glassfish-domain1.service")
+    new_line = "ExecStartPre=/bin/bash -c 'sleep 5 && if systemctl list-units --full -all | grep -Fq 'mysqld.service'; then systemctl is-active --quiet mysqld; fi'"
+    file.insert_line_if_no_match(/#{new_line}/, new_line)
+    file.write_file
+  end
+  action :create
+end
+
+kagent_config "glassfish-domain1" do 
+  action :systemd_reload
 end
 
 glassfish_secure_admin domain_name do
@@ -554,7 +480,7 @@ props =  {
  end
 
 # Enable JMX metrics
-glassfish_asadmin "set-monitoring-configuration --dynamic true --enabled true --amx true --logfrequency 15 --logfrequencyunit SECONDS" do 
+glassfish_asadmin "set-monitoring-configuration --dynamic true --enabled true --amx true --logfrequency 15 --logfrequencyunit SECONDS" do
    domain_name domain_name
    password_file "#{domains_dir}/#{domain_name}_admin_passwd"
    username username
@@ -562,28 +488,78 @@ glassfish_asadmin "set-monitoring-configuration --dynamic true --enabled true --
    secure false
 end
 
+# add new network listener for Hopsworks to listen on an internal port
+glassfish_asadmin "create-protocol --securityenabled=true --target server https-internal" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-protocols | grep 'https-internal'"
+end
+
+glassfish_asadmin "create-http --default-virtual-server server https-internal" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} get server.network-config.protocols.protocol.https-internal.* | grep 'http.version'"
+end
+
+glassfish_asadmin "create-network-listener --listenerport #{node['hopsworks']['internal']['port']} --threadpool http-thread-pool --target server --protocol https-internal https-int-list" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-http-listeners | grep 'https-int-list'"
+end
+
+glassfish_asadmin "create-managed-executor-service --enabled=true --longrunningtasks=true --corepoolsize=50 --maximumpoolsize=400 --keepaliveseconds=60 --taskqueuecapacity=20000 concurrent/condaExecutorService" do
+   domain_name domain_name
+   password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+   username username
+   admin_port admin_port
+   secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-managed-executor-services | grep 'conda'"
+end
+
 glassfish_conf = {
   'server-config.security-service.default-realm' => 'cauthRealm',
   # Jobs in Hopsworks use the Timer service
   'server-config.ejb-container.ejb-timer-service.timer-datasource' => 'jdbc/hopsworksTimers',
   'server.ejb-container.ejb-timer-service.property.reschedule-failed-timer' => node['glassfish']['reschedule_failed_timer'],
-  'server.http-service.virtual-server.server.property.send-error_1' => "\"code=404 path=#{domains_dir}/#{domain_name}/docroot/404.html reason=Resource_not_found\"",
+  'server.http-service.virtual-server.server.property.send-error_1' => "\"code=404 path=#{domains_dir}/#{domain_name}/docroot/index.html reason=Resource_not_found\"",
   # Enable/Disable HTTP listener
   'configs.config.server-config.network-config.network-listeners.network-listener.http-listener-1.enabled' => false,
-  # Make sure the https listener is listening on the requested port 
+  # Make sure the https listener is listening on the requested port
   'configs.config.server-config.network-config.network-listeners.network-listener.http-listener-2.port' => node['hopsworks']['https']['port'],
   # Disable SSL3
-  'server.network-config.protocols.protocol.http-listener-2.ssl.ssl3-enabled' => false, 
+  'server.network-config.protocols.protocol.http-listener-2.ssl.ssl3-enabled' => false,
   'server.network-config.protocols.protocol.sec-admin-listener.ssl.ssl3-enabled' => false,
+  'server.network-config.protocols.protocol.https-internal.ssl.ssl3-enabled' => false,
+  'server.admin-service.jmx-connector.system.ssl.ssl3-enabled' => false,
+  'server.iiop-service.iiop-listener.SSL.ssl.ssl3-enabled' => false,
+  'server.iiop-service.iiop-listener.SSL_MUTUALAUTH.ssl.ssl3-enabled' => false,
   # Disable TLS 1.0
   'server.network-config.protocols.protocol.http-listener-2.ssl.tls-enabled' => false,
   'server.network-config.protocols.protocol.sec-admin-listener.ssl.tls-enabled' => false,
+  'server.network-config.protocols.protocol.https-internal.ssl.tls-enabled' => false,
+  'server.admin-service.jmx-connector.system.ssl.tls-enabled' => false,
+  'server.iiop-service.iiop-listener.SSL.ssl.tls-enabled' => false,
+  'server.iiop-service.iiop-listener.SSL_MUTUALAUTH.ssl.tls-enabled' => false,
   # Restrict ciphersuite
   'configs.config.server-config.network-config.protocols.protocol.http-listener-2.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
   'configs.config.server-config.network-config.protocols.protocol.sec-admin-listener.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
+  'configs.config.server-config.network-config.protocols.protocol.https-internal.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
+  'server.admin-service.jmx-connector.system.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
+  'server.iiop-service.iiop-listener.SSL.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
+  'server.iiop-service.iiop-listener.SSL_MUTUALAUTH.ssl.ssl3-tls-ciphers' => node['glassfish']['ciphersuite'],
   # Set correct thread-priority for the executor services - required during updates
   'resources.managed-executor-service.concurrent\/hopsExecutorService.thread-priority' => 10,
   'resources.managed-thread-factory.concurrent\/hopsThreadFactory.thread-priority' => 10,
+  'resources.managed-executor-service.concurrent\/condaExecutorService.thread-priority' => 9,
   # Enable Single Sign on
   'configs.config.server-config.http-service.virtual-server.server.sso-enabled' => true,
   'configs.config.server-config.http-service.virtual-server.server.sso-cookie-http-only' => true,
@@ -603,7 +579,17 @@ glassfish_conf = {
   'configs.config.server-config.monitoring-service.module-monitoring-levels.jpa' => 'HIGH',
   'configs.config.server-config.monitoring-service.module-monitoring-levels.web-container' => 'HIGH',
   'server.network-config.protocols.protocol.http-listener-2.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout'],
-  'server.network-config.protocols.protocol.http-listener-1.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout']
+  'server.network-config.protocols.protocol.http-listener-1.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout'],
+  'server.network-config.protocols.protocol.https-internal.http.timeout-seconds' => node['glassfish']['http']['keep_alive_timeout'],
+  'resources.jdbc-connection-pool.hopsworksPool.property.User' => node['hopsworks']['mysql']['user'],
+  'resources.jdbc-connection-pool.hopsworksPool.property.Password' => node['hopsworks']['mysql']['password'],
+  'resources.jdbc-connection-pool.hopsworksPool.property.useSSL' => 'false',
+  'resources.jdbc-connection-pool.hopsworksPool.property.allowPublicKeyRetrieval' => 'true',
+  'resources.jdbc-connection-pool.ejbTimerPool.property.User' => node['hopsworks']['mysql']['user'],
+  'resources.jdbc-connection-pool.ejbTimerPool.property.Password' => node['hopsworks']['mysql']['password'],
+  'resources.jdbc-connection-pool.ejbTimerPool.property.useSSL' => 'false',
+  'resources.jdbc-connection-pool.ejbTimerPool.property.allowPublicKeyRetrieval' => 'true',
+  'server.network-config.protocols.protocol.https-internal.ssl.cert-nickname' => 'internal'
 }
 
 glassfish_conf.each do |property, value|
@@ -630,13 +616,23 @@ if exists_local("hops_airflow", "default")
   airflow_exists = true
   # In case of an upgrade, attribute-driven-domain will not run but we still need to configure
   # connection pool for Airflow
-  glassfish_asadmin "create-jdbc-connection-pool --restype javax.sql.DataSource --datasourceclassname com.mysql.jdbc.jdbc2.optional.MysqlDataSource --ping=true --isconnectvalidatereq=true --validationmethod=auto-commit --description=\"Airflow connection pool\" --property user=#{node['airflow']['mysql_user']}:password=#{node['airflow']['mysql_password']}:url=\"jdbc\\:mysql\\://#{mysql_host}\\:3306/\" airflowPool" do
+
+  # Drop Existing airflowPool connection pool and recreate it
+  glassfish_asadmin "delete-jdbc-connection-pool --cascade airflowPool" do
     domain_name domain_name
     password_file "#{domains_dir}/#{domain_name}_admin_passwd"
     username username
     admin_port admin_port
     secure false
-    not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-jdbc-connection-pools | grep 'airflowPool'"
+    only_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-jdbc-connection-pools | grep 'airflowPool$'"
+  end
+
+  glassfish_asadmin "create-jdbc-connection-pool --restype javax.sql.DataSource --datasourceclassname com.mysql.cj.jdbc.MysqlDataSource --ping=true --isconnectvalidatereq=true --validationmethod=auto-commit --description=\"Airflow connection pool\" --property user=#{node['airflow']['mysql_user']}:password=#{node['airflow']['mysql_password']}:url=\"jdbc\\:mysql\\://127.0.0.1\\:3306/\":useSSL=false:allowPublicKeyRetrieval=true airflowPool" do
+    domain_name domain_name
+    password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+    username username
+    admin_port admin_port
+    secure false
   end
 
   glassfish_asadmin "create-jdbc-resource --connectionpoolid airflowPool --description \"Airflow jdbc resource\" jdbc/airflow" do
@@ -645,17 +641,26 @@ if exists_local("hops_airflow", "default")
     username username
     admin_port admin_port
     secure false
-    not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-jdbc-resources | grep 'jdbc/airflow'"
+    not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-jdbc-resources | grep 'jdbc/airflow$'"
   end
 end
 
-glassfish_asadmin "create-jdbc-connection-pool --restype javax.sql.DataSource --datasourceclassname com.mysql.jdbc.jdbc2.optional.MysqlDataSource --ping=true --isconnectvalidatereq=true --validationmethod=auto-commit --description=\"Featurestore connection pool\" --property user=#{node['featurestore']['user']}:password=#{node['featurestore']['password']}:url=#{featurestore_jdbc_url_escaped} featureStorePool" do
+# Drop Existing featureStore connection pool and recreate it
+glassfish_asadmin "delete-jdbc-connection-pool --cascade featureStorePool" do
   domain_name domain_name
   password_file "#{domains_dir}/#{domain_name}_admin_passwd"
   username username
   admin_port admin_port
   secure false
-  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-jdbc-connection-pools | grep 'featureStorePool'"
+  only_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-jdbc-connection-pools | grep 'featureStorePool$'"
+end
+
+glassfish_asadmin "create-jdbc-connection-pool --restype javax.sql.DataSource --datasourceclassname com.mysql.cj.jdbc.MysqlDataSource --ping=true --isconnectvalidatereq=true --validationmethod=auto-commit --description=\"Featurestore connection pool\" --property user=#{node['featurestore']['user']}:password=#{node['featurestore']['password']}:url=\"#{node['featurestore']['hopsworks_url'].gsub(":", "\\:")}\":useSSL=false:allowPublicKeyRetrieval=true featureStorePool" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
 end
 
 glassfish_asadmin "create-jdbc-resource --connectionpoolid featureStorePool --description \"Featurestore jdbc resource\" jdbc/featurestore" do
@@ -664,16 +669,69 @@ glassfish_asadmin "create-jdbc-resource --connectionpoolid featureStorePool --de
   username username
   admin_port admin_port
   secure false
-  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-jdbc-resources | grep 'jdbc/featurestore'"
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-jdbc-resources | grep 'jdbc/featurestore$'"
 end
 
+# Drop Existing hopsworksPool connection pool and recreate it
+glassfish_asadmin "delete-jdbc-connection-pool --cascade hopsworksPool" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  only_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-jdbc-connection-pools | grep 'hopsworksPool$'"
+end
+
+glassfish_asadmin "create-jdbc-connection-pool --restype javax.sql.DataSource --datasourceclassname com.mysql.cj.jdbc.MysqlDataSource --ping=true --isconnectvalidatereq=true --validationmethod=auto-commit --description=\"Hopsworks Connection Pool\" --property user=#{node['hopsworks']['mysql']['user']}:password=#{node['hopsworks']['mysql']['password']}:url=\"jdbc\\:mysql\\://127.0.0.1\\:3306/\":useSSL=false:allowPublicKeyRetrieval=true hopsworksPool" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+end
+
+glassfish_asadmin "create-jdbc-resource --connectionpoolid hopsworksPool --description \"Resource for Hopsworks Pool\" jdbc/hopsworks" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-jdbc-resources | grep 'jdbc/hopsworks$'"
+end
+
+# Drop Existing ejbTimerPool connection pool and recreate it
+glassfish_asadmin "delete-jdbc-connection-pool --cascade ejbTimerPool" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  only_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-jdbc-connection-pools | grep 'ejbTimerPool$'"
+end
+
+glassfish_asadmin "create-jdbc-connection-pool --restype javax.sql.DataSource --datasourceclassname com.mysql.cj.jdbc.MysqlDataSource --ping=true --isconnectvalidatereq=true --validationmethod=auto-commit --description=\"Hopsworks EJB Connection Pool\" --property user=#{node['hopsworks']['mysql']['user']}:password=#{node['hopsworks']['mysql']['password']}:url=\"jdbc\\:mysql\\://127.0.0.1\\:3306/glassfish_timers\":useSSL=false:allowPublicKeyRetrieval=true ejbTimerPool" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+end
+
+glassfish_asadmin "create-jdbc-resource --connectionpoolid ejbTimerPool --description \"Resource for Hopsworks EJB Timers Pool\" jdbc/hopsworksTimers" do
+  domain_name domain_name
+  password_file "#{domains_dir}/#{domain_name}_admin_passwd"
+  username username
+  admin_port admin_port
+  secure false
+  not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd} list-jdbc-resources | grep 'jdbc/hopsworksTimers$'"
+end
 
 logging_conf = {
   'com.sun.enterprise.server.logging.GFFileHandler.logtoFile' => true,
   'com.sun.enterprise.server.logging.GFFileHandler.rotationLimitInBytes' => node['hopsworks']['logsize'],
+  # the main logger doesn't work either.
   # These are just some random number, we are not enabling this logger. However if they are not set
-  # the main logger doesn't work either. 
-  'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.rotationLimitInBytes' => 2000000,  
+  'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.rotationLimitInBytes' => 2000000,
   'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.rotationTimelimitInMinutes' => 0,
   'fish.payara.enterprise.server.logging.PayaraNotificationFileHandler.maxHistoryFiles' => 3
 }
@@ -693,7 +751,7 @@ loglevels_conf = {
 }
 
 loglevels_conf.each do |property, value|
-  glassfish_asadmin "set-log-levels #{property}=#{value}" do 
+  glassfish_asadmin "set-log-levels #{property}=#{value}" do
     domain_name domain_name
     password_file "#{domains_dir}/#{domain_name}_admin_passwd"
     username username
@@ -730,7 +788,7 @@ if node['ldap']['enabled'].to_s == "true" || node['kerberos']['enabled'].to_s ==
   end
 end
 
-if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_conf_path'].to_s.empty? 
+if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_conf_path'].to_s.empty?
   krb_conf_path = node['kerberos']['krb_conf_path']
   remote_file "#{theDomain}/config/krb5.conf" do
     source "file:///#{krb_conf_path}"
@@ -741,7 +799,7 @@ if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_conf_pat
   end
 end
 
-if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_server_key_tab_path'].to_s.empty? 
+if node['kerberos']['enabled'].to_s == "true" && !node['kerberos']['krb_server_key_tab_path'].to_s.empty?
   key_tab_path = node['kerberos']['krb_server_key_tab_path']
   ket_tab_name = node['kerberos']['krb_server_key_tab_name']
   remote_file "#{theDomain}/config/#{ket_tab_name}" do
@@ -815,10 +873,15 @@ end
 
 node.override['glassfish']['asadmin']['timeout'] = 400
 
-if node['install']['enterprise']['install'].casecmp? "true"
-  node.override['hopsworks']['ear_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ear#{node['install']['kubernetes'].casecmp?("true") == 0 ? "-kube" : ""}.ear"
-  node.override['hopsworks']['war_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-web.war"
-  node.override['hopsworks']['ca_url'] = "#{node['install']['enterprise']['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ca.war"  
+if node['install']['enterprise']['install'].casecmp? "true" and exists_local("cloud", "default")
+  unmanaged = false
+  if node.attribute? 'cloud' and node['cloud'].attribute? 'init' and node['cloud']['init'].attribute? 'config' and node['cloud']['init']['config'].attribute? 'unmanaged'
+    unmanaged = node['cloud']['init']['config']['unmanaged'].casecmp? 'true'
+  end
+  unless unmanaged
+    ear_name = (node['install']['kubernetes'].casecmp?("true") and node['install']['managed_kubernetes'].casecmp?("true")) ? "hopsworks-ear-cloud-kube.ear" : "hopsworks-ear-cloud.ear"
+    node.override['hopsworks']['ear_url'] = "#{node['hopsworks']['download_url']}/#{ear_name}"
+  end
 end
 
 glassfish_deployable "hopsworks-ear" do
@@ -846,7 +909,7 @@ glassfish_deployable "hopsworks" do
   target "server"
   url node['hopsworks']['war_url']
   auth_username node['install']['enterprise']['username']
-  auth_password node['install']['enterprise']['password']  
+  auth_password node['install']['enterprise']['password']
   version node['hopsworks']['version']
   context_root "/hopsworks"
   domain_name domain_name
@@ -867,7 +930,7 @@ glassfish_deployable "hopsworks-ca" do
   target "server"
   url node['hopsworks']['ca_url']
   auth_username node['install']['enterprise']['username']
-  auth_password node['install']['enterprise']['password']  
+  auth_password node['install']['enterprise']['password']
   version node['hopsworks']['version']
   context_root "/hopsworks-ca"
   domain_name domain_name
@@ -883,6 +946,35 @@ glassfish_deployable "hopsworks-ca" do
   not_if "#{asadmin} --user #{username} --passwordfile #{admin_pwd}  list-applications --type ejb | grep -w \"hopsworks-ca:#{node['hopsworks']['version']}\""
 end
 
+
+# Deploy the new react frontend - clean the directory from the previous version
+directory "#{theDomain}/docroot" do
+  recursive true
+  action :delete
+end
+
+directory "#{theDomain}/docroot" do
+  owner node['hopsworks']['user']
+  group node['hopsworks']['group']
+  mode "770"
+  action :create
+end
+
+remote_file "#{Chef::Config['file_cache_path']}/frontend.tgz" do
+  source node['hopsworks']['frontend_url']
+  user node['glassfish']['user']
+  group node['glassfish']['group']
+  mode 0755
+  action :create
+end
+
+bash "extract_frontend" do
+  user node['hopsworks']['user']
+  group node['hopsworks']['group']
+  code <<-EOH
+    tar xf #{Chef::Config['file_cache_path']}/frontend.tgz -C #{theDomain}/docroot
+  EOH
+end
 
 #
 # If deployment of the new version succeeds, then undeploy the previous version
@@ -927,16 +1019,10 @@ template "/bin/hopsworks-2fa" do
     owner "root"
     mode 0700
     action :create
- end
+end
 
 hopsworks_certs "generate-certs" do
   action :generate
-end
-
-# Since Hopsworks v1.1 we don't need the symlink
-link "delete-crl-symlink" do
-  target_file "#{domains_dir}/#{domain_name}/docroot/intermediate.crl.pem"
-  action :delete
 end
 
 template "#{::Dir.home(node['hopsworks']['user'])}/.condarc" do
@@ -946,8 +1032,24 @@ template "#{::Dir.home(node['hopsworks']['user'])}/.condarc" do
   group node['glassfish']['group']
   mode 0750
   variables({
-    :pkgs_dirs => node['hopsworks']['conda_cache'] 
+    :pkgs_dirs => node['hopsworks']['conda_cache']
   })
+  action :create
+end
+
+directory "#{::Dir.home(node['hopsworks']['user'])}/.pip" do
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0700'
+  action :create
+end
+
+template "#{::Dir.home(node['hopsworks']['user'])}/.pip/pip.conf" do
+  source "pip.conf.erb"
+  cookbook "conda"
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode 0750
   action :create
 end
 
@@ -959,7 +1061,7 @@ case node['platform_family']
 
   scala_rpm_path="#{Chef::Config['file_cache_path']}/scala-#{node['scala']['version']}.rpm"
   remote_file scala_rpm_path do
-    source node['scala']['download_url'] 
+    source node['scala']['download_url']
     owner 'root'
     group 'root'
     mode '0755'
@@ -970,7 +1072,7 @@ case node['platform_family']
     user "root"
     cwd Chef::Config['file_cache_path']
     code <<-EOF
-      set -e  
+      set -e
       yum install -y scala-#{node['scala']['version']}.rpm
     EOF
     not_if "which scala"
@@ -1010,14 +1112,14 @@ directory node['hopsworks']['staging_dir']  do
 end
 
 directory node['hopsworks']['staging_dir'] + "/private_dirs"  do
-  owner node['jupyter']['user']
+  owner node['hops']['yarnapp']['user']
   group node['hopsworks']['group']
   mode "0370"
   action :create
 end
 
 directory node['hopsworks']['staging_dir'] + "/serving"  do
-  owner node['serving']['user']
+  owner node['hopsworks']['user']
   group node['hopsworks']['group']
   mode "0730"
   action :create
@@ -1079,8 +1181,38 @@ ruby_block "generate_service_jwt" do
 end
 
 # Force variables reload
-hopsworks_grants "restart_glassfish" do
-  action :reload_systemd
+kagent_config "glassfish-domain1" do 
+  action :systemd_reload
+end
+
+hopsworks_certs "generate-int-certs" do
+  subject     "/CN=#{consul_helper.get_service_fqdn("hopsworks.glassfish")}/OU=0"
+  action      :generate_int_certs
+  not_if      (::File.exist?("#{node['hopsworks']['config_dir']}/internal_bundle.crt"))
+end
+
+hopsworks_certs "download_azure_ca_cert" do
+  action      :download_azure_ca_cert
+  not_if      (::File.exist?("/tmp/DigiCertGlobalRootG2.crt"))
+end
+
+# Force reload of the certificate
+kagent_config "glassfish-domain1" do 
+  action :systemd_reload
+end
+
+# Register Glassfish with Consul
+template "#{node['glassfish']['domains_dir']}/#{node['hopsworks']['domain_name']}/bin/glassfish-health.sh" do
+  source "consul/glassfish-health.sh.erb"
+  owner node['hopsworks']['user']
+  group node['hops']['group']
+  mode 0750
+end
+
+consul_service "Registering Glassfish with Consul" do
+  service_definition "consul/glassfish-consul.hcl.erb"
+  reload_consul false
+  action :register
 end
 
 template "#{domains_dir}/#{domain_name}/bin/letsencrypt.sh" do
@@ -1096,14 +1228,6 @@ directory "/usr/local/share/jupyter/nbextensions/witwidget"  do
   mode "775"
   action :create
   recursive true
-end
-
-include_recipe "tensorflow::serving"
-
-link "#{node['kagent']['certs_dir']}/cacerts.jks" do
-  owner node['glassfish']['user']
-  group node['glassfish']['group']
-  to "#{theDomain}/config/cacerts.jks"
 end
 
 #
@@ -1128,6 +1252,15 @@ kagent_keys "#{homedir}" do
   action :return_publickey
 end
 
+registry_addr = { :registry_addr => consul_helper.get_service_fqdn("registry") + ":#{node['hops']['docker']['registry']['port']}"}
+kagent_sudoers "dockerImage" do
+  user          node['glassfish']['user']
+  group         "root"
+  script_name   "dockerImage.sh"
+  template      "dockerImage.sh.erb"
+  variables     registry_addr
+  run_as        "ALL" # run this as root - inside we change to different users
+end
 
 #
 # Rstudio
@@ -1187,4 +1320,3 @@ if node['rstudio']['enabled'].eql? "true"
     EOF
   end
 end
-

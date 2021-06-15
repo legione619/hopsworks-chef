@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 
 help() {
-  echo "usage: $0 localWorkdir directoryInHdfs IMPERSONATED_USERNAME"
+  echo "usage: $0 localWorkdir directoryInHdfs IMPERSONATED_USERNAME [destDirectoryInHdfs]"
   exit 1
 }
 
-if [ $# -ne 3 ] ; then
+if [ $# -ne 3 && $# -ne 4 ] ; then
   help
 fi
 
 workdir=$1
 hdfsFile="$2"
 IMPERSONATED_USERNAME=$3
+dir="$4"
 
 #FSM states: STAGING, ZIPPING, UPLOADING, CHOWNING, SUCCESS, FAILED
 fsmFile="${workdir}/fsm.txt"
@@ -30,13 +31,19 @@ function check_error {
     fi
 }
 
+uriencode() {
+  python -c "import sys, urllib as ul; print ul.quote(sys.argv[1])" "$1"
+}
+
 prefix='hdfs://'
 normalizedPath=${hdfsFile#${prefix}}
 check_error
 
 file=$(basename "$normalizedPath")
 check_error
-dir=$(dirname "$normalizedPath")
+if [ -z "$dir" ] ; then
+  dir=$(dirname "$normalizedPath")
+fi
 check_error
 
 cd "$workdir"
@@ -59,8 +66,8 @@ cd "$workdir"
 zip -r "$file".zip "$file"
 check_error
 
-# replace any spaces in the directory name with '%20'
-escapedFileName=${file// /%20}
+# uri encode filename
+escapedFileName=$(uriencode "${file}")
 
 echo "UPLOADING" > "$fsmFile"
 <%= node['hops']['base_dir'] %>/bin/hdfs dfs -copyFromLocal "${escapedFileName}.zip" "${dir}"

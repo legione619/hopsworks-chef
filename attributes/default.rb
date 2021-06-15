@@ -8,11 +8,12 @@ include_attribute "elastic"
 include_attribute "glassfish"
 include_attribute "kkafka"
 include_attribute "kzookeeper"
-include_attribute "drelephant"
 include_attribute "dela"
 include_attribute "hive2"
 include_attribute "hops"
 include_attribute "hops_airflow"
+include_attribute "kube-hops"
+include_attribute "onlinefs"
 
 default['hopsworks']['version']                  = node['install']['version']
 default['hopsworks']['current_version']          = node['install']['current_version']
@@ -27,8 +28,10 @@ default['hopsworks']['user']                     = node['install']['user'].empty
 default['glassfish']['user']                     = node['hopsworks']['user']
 default['hopsworks']['group']                    = node['install']['user'].empty? ? "glassfish" : node['install']['user']
 default['glassfish']['group']                    = node['hopsworks']['group']
+default['glassfish']['user-home']                = "/home/#{node['hopsworks']['user']}"
 
 default['hopsworks']['https']['port']            = 8181
+default['hopsworks']['internal']['port']         = 8182
 
 default['hopsworks']['admin']['port']            = 4848
 default['hopsworks']['admin']['user']            = "adminuser"
@@ -36,10 +39,8 @@ default['hopsworks']['admin']['password']        = "adminpw"
 default['hopsworks']['admin']['email']           = "admin@hopsworks.ai"
 
 default['hopsworks']['db']                       = "hopsworks"
-
-# Usernames and passwords of non-superusers in MySQL
-default['hopsworks']['mysql']['user']['kafka']               = "kafka"
-default['hopsworks']['mysql']['password']['kafka']            = "kafka"
+default['hopsworks']['mysql']['user']            = "hopsworks"
+default['hopsworks']['mysql']['password']        = "hopsworks"
 
 default['glassfish']['version']                  = '4.1.2.181'  # '5.182'
 default['authbind']['download_url']              = "#{node['download_url']}/authbind-2.1.2-0.1.x86_64.rpm"
@@ -68,6 +69,7 @@ default['hopsworks']['max_stack_size']           = "1500"
 default['glassfish']['max_stack_size']           = node['hopsworks']['max_stack_size'].to_i
 default['hopsworks']['http_logs']['enabled']     = "true"
 default['hopsworks']['env_var_file']             = "#{node['hopsworks']['domains_dir']}/#{node['hopsworks']['domain_name']}_environment_variables"
+default['hopsworks']['config_dir']               = "#{node['hopsworks']['domains_dir']}/#{node['hopsworks']['domain_name']}/config"
 
 default['glassfish']['reschedule_failed_timer']     = "true"
 
@@ -75,9 +77,13 @@ default['glassfish']['package_url']              = node['download_url'] + "/paya
 default['hopsworks']['cauth_version']            = "otp-auth-0.4.0.jar"
 default['hopsworks']['cauth_url']                = "#{node['download_url']}/#{node['hopsworks']['cauth_version']}"
 
-default['hopsworks']['war_url']                  = "#{node['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-web.war"
-default['hopsworks']['ca_url']                   = "#{node['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ca.war"
-default['hopsworks']['ear_url']                  = "#{node['download_url']}/hopsworks/#{node['hopsworks']['version']}/hopsworks-ear#{node['install']['kubernetes'].casecmp?("true") ? "-kube" : ""}.ear"
+default['hopsworks']['download_url']             = "#{node['install']['enterprise']['install'].casecmp?("true") ? node['install']['enterprise']['download_url'] : node['download_url']}/hopsworks/#{node['hopsworks']['version']}"
+default['hopsworks']['war_url']                  = "#{node['hopsworks']['download_url']}/hopsworks-web.war"
+default['hopsworks']['ca_url']                   = "#{node['hopsworks']['download_url']}/hopsworks-ca.war"
+default['hopsworks']['ear_url']                  = "#{node['hopsworks']['download_url']}/hopsworks-ear#{node['install']['kubernetes'].casecmp?("true") ? "-kube" : ""}.ear"
+
+# Currently we don't have an enterprise version of the new frontend. So the download url is the same for both community and enterprise 
+default['hopsworks']['frontend_url']             = "#{node['download_url']}/hopsworks/frontend/#{node['hopsworks']['version']}/frontend.tgz"
 
 default['hopsworks']['logsize']                  = "200000000"
 
@@ -103,7 +109,7 @@ default['hopsworks']['spark_ui_logs_offset'] = "512000"
 #Log level of REST API
 default['hopsworks']['hopsworks_rest_log_level'] = "PROD"
 
-default['hopsworks']['mysql_connector_url']         = "#{node['download_url']}/mysql-connector-java-5.1.29-bin.jar"
+default['hopsworks']['mysql_connector_url']         = "#{node['download_url']}/mysql-connector-java-8.0.21-bin.jar"
 
 default['hopsworks']['cert']['cn']                  = "logicalclocks.com"
 default['hopsworks']['cert']['o']                   = "Logical Clocks AB"
@@ -127,13 +133,14 @@ default['hopsworks']['alert_email_addrs']        = ""
 
 default['hopsworks']['support_email_addr']       = "support@logicalclocks.com"
 
-# #quotas
+#quotas
 default['hopsworks']['yarn_default_quota_mins']          = "1000000"
-default['hopsworks']['hdfs_default_quota_mbs']           = "500000"
-default['hopsworks']['hive_default_quota_mbs']           = "250000"
-default['hopsworks']['featurestore_default_quota_mbs']   = "250000"
+default['hopsworks']['yarn_default_payment_type']        = "NOLIMIT"
+default['hopsworks']['hdfs_default_quota_mbs']           = "-1"
+default['hopsworks']['hive_default_quota_mbs']           = "-1"
+default['hopsworks']['featurestore_default_quota_mbs']   = "-1"
 default['hopsworks']['max_num_proj_per_user']            = "10"
-default['hopsworks']['reserved_project_names']           = "python27,python36,python37,python38,python39,hops-system,hopsworks,information_schema,airflow,glassfish_timers,grafana,hops,metastore,mysql,ndbinfo,performance_schema,sqoop,sys"
+default['hopsworks']['reserved_project_names']           = "hops-system,hopsworks,information_schema,airflow,glassfish_timers,grafana,hops,metastore,mysql,ndbinfo,performance_schema,sqoop,sys,base,python37,filebeat"
 
 # file preview and download
 default['hopsworks']['file_preview_image_size']  = "10000000"
@@ -241,8 +248,6 @@ default['hopsworks']['nonconda_hosts']               = ""
 # Jupyter
 #
 default['jupyter']['base_dir']                         = node['install']['dir'].empty? ? node['hopsworks']['dir'] + "/jupyter" : node['install']['dir'] + "/jupyter"
-default['jupyter']['user']                             = node['install']['user'].empty? ? "jupyter" : node['install']['user']
-default['jupyter']['group']                            = node['install']['user'].empty? ? "jupyter" : node['install']['user']
 default['jupyter']['python']                           = "true"
 default['jupyter']['shutdown_timer_interval']          = "30m"
 default['jupyter']['ws_ping_interval']                 = "10s"
@@ -252,15 +257,21 @@ default['jupyter']['origin_scheme']                    = "https"
 # Serving
 #
 default['serving']['base_dir']                       = node['install']['dir'].empty? ? node['hopsworks']['dir'] + "/staging" : node['install']['dir'] + "/staging"
-default['serving']['user']                           = node['install']['user'].empty? ? "serving" : node['install']['user']
-default['serving']['group']                          = node['install']['user'].empty? ? "serving" : node['install']['user']
 default['serving']['pool_size']                      = "40"
 default['serving']['max_route_connections']          = "10"
+
+#
+# TensorBoard
+#
+default['tensorboard']['max']['reload']['threads']          = "1"
 
 #
 # PyPi
 #
 default['hopsworks']['pypi_rest_endpoint']             = "https://pypi.org/pypi/{package}/json"
+default['hopsworks']['pypi_indexer_timer_interval']    = "1d"
+default['hopsworks']['pypi_simple_endpoint']           = "https://pypi.org/simple/"
+default['hopsworks']['python_library_updates_monitor_interval']    = "1d"
 
 # Hive
 
@@ -271,7 +282,7 @@ default['hopsworks']['hive2']['scratch_dir_cleaner_interval']     = "24h"
 # Database upgrades
 #
 # "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/5.0.3/flyway-commandline-5.0.3-linux-x64.tar.gz"
-default['hopsworks']['flyway']['version']              = "5.0.3"
+default['hopsworks']['flyway']['version']              = "6.5.1"
 default['hopsworks']['flyway_url']                     = node['download_url'] + "/flyway-commandline-#{node['hopsworks']['flyway']['version']}-linux-x64.tar.gz"
 
 
@@ -332,12 +343,16 @@ default['ldap']['security_principal']                = ""
 default['ldap']['security_credentials']              = ""
 default['ldap']['referral']                          = "ignore"
 default['ldap']['additional_props']                  = ""
+default['ldap']['group_mapping_sync_interval']       = 0
 
 # OAuth2
 default['oauth']['enabled']                          = "false"
 default['oauth']['redirect_uri']                     = "hopsworks/callback"
+default['oauth']['logout_redirect_uri']              = "hopsworks/"
 default['oauth']['account_status']                   = 1
 default['oauth']['group_mapping']                    = ""
+
+default['remote_auth']['need_consent']               = "true"
 
 default['hopsworks']['disable_password_login']       = "false"
 default['hopsworks']['disable_registration']         = "false"
@@ -382,7 +397,7 @@ default['hopsworks']['expat_dir']                    = "#{node['install']['dir']
 #
 # Feature Store
 #
-default['hopsworks']['featurestore_default_storage_format']   = "ORC"
+default['hopsworks']['featurestore_default_storage_format']   = "PARQUET"
 default['hopsworks']['featurestore_online']                   = "false"
 
 default['scala']['version']                   = "2.11.8"
@@ -405,24 +420,45 @@ default['hopsworks']['kagent_liveness']['threshold']       = "10s"
 # Online FeatureStore JDBC Connection Details
 #
 
-default['featurestore']['jdbc_url']                        = "localhost"
-default['featurestore']['user']                            = node['mysql']['user']
-default['featurestore']['password']                        = node['mysql']['password']
+default['featurestore']['jdbc_url']             = "jdbc:mysql://onlinefs.mysql.service.#{node['consul']['domain']}:#{node['ndb']['mysql_port']}/"
+default['featurestore']['hopsworks_url']        = "jdbc:mysql://127.0.0.1:#{node['ndb']['mysql_port']}/"
+default['featurestore']['user']                 = node['mysql']['user']
+default['featurestore']['password']             = node['mysql']['password']
+default['featurestore']['job_activity_timer']   = "5m"
 
 # hops-util-py
-default['hopsworks']['requests_verify'] = "true"
+default['hopsworks']['requests_verify']       = node['hops']['tls']['enabled']
 
 #
 # Provenance
 #
 # Provenance type can be set to MIN/FULL
-default['hopsworks']['provenance']['type']                            = "MIN"
+default['hopsworks']['provenance']['type']                    = "FULL"
 #define how big each archive round is - how many indices get cleaned
 default['hopsworks']['provenance']['archive']['batch_size']   = "10"
 #define how long to keep deleted items before archiving them - default 24h
 default['hopsworks']['provenance']['archive']['delay']        = "86400"
 #define in seconds the period between two provenance cleaner timeouts - default 1h
-default['hopsworks']['provenance']['cleaner']['period']        = "3600"
+default['hopsworks']['provenance']['cleaner']['period']       = "3600"
 
 # clients
 default['hopsworks']['client_path']           = "COMMUNITY"
+
+# hdfs storage policy
+# accepted hopsworks storage policy files: CLOUD, DB, HOT
+# Set the DIR_ROOT (/Projects) to have DB storage policy
+default['hopsworks']['hdfs']['storage_policy']['base']        = "DB"
+# To not fill the SSDs with Logs files that nobody access frequently we set the StoragePolicy for the LOGS dir to be default HOT
+default['hopsworks']['hdfs']['storage_policy']['log']         = "HOT"
+
+default["hopsworks"]['check_nodemanager_status']              = "false"
+
+default['hopsworks']['azure-ca-cert']['download-url']         = "https://cacerts.digicert.com/DigiCertGlobalRootG2.crt"
+
+#livy
+default['hopsworks']['livy_startup_timeout']           = "240"
+
+# Docker job
+default['hopsworks']['docker-job']['docker_job_mounts_list']    = ""
+default['hopsworks']['docker-job']['docker_job_mounts_allowed'] = "false"
+default['hopsworks']['docker-job']['docker_job_uid_strict'] = "true"
