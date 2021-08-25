@@ -4,7 +4,7 @@ maintainer_email "jdowling@kth.se"
 license          "Apache v2.0"
 description      "Installs/Configures HopsWorks, the UI for Hops Hadoop."
 long_description IO.read(File.join(File.dirname(__FILE__), 'README.md'))
-version          "2.2.0"
+version          "2.3.0"
 source_url       "https://github.com/logicalclocks/hopsworks-chef"
 
 
@@ -12,13 +12,12 @@ source_url       "https://github.com/logicalclocks/hopsworks-chef"
   supports os
 end
 
-depends 'java', '~> 7.0.0'
-depends 'simple-logstash', '~> 0.2.4'
 depends 'compat_resource', '~> 12.19.0'
 depends 'authbind', '~> 0.1.10'
 depends 'ntp', '~> 2.0.0'
 depends 'sysctl', '~> 1.0.3'
 depends 'ulimit2', '~> 0.2.0'
+depends 'seven_zip', '~> 3.2.0'
 depends 'conda'
 depends 'kagent'
 depends 'hops'
@@ -41,6 +40,7 @@ depends 'ulimit'
 depends 'glassfish'
 depends 'kube-hops'
 depends 'onlinefs'
+depends 'java'
 
 
 recipe  "hopsworks::install", "Installs Glassfish"
@@ -836,6 +836,18 @@ attribute "hopsworks/pypi_rest_endpoint",
           :description => "Url to PyPi REST API to query package information",
           :type => 'string'
 
+attribute "hopsworks/pypi_simple_endpoint",
+          :description => "Url to PyPi simple endpoint",
+          :type => 'string'
+
+attribute "hopsworks/pypi_indexer_timer_interval",
+          :description => "How often to run the PyPi Indexer",
+          :type => 'string'
+
+attribute "hopsworks/pypi_indexer_timer_enabled",
+          :description => "Whether to enable the PyPi Indexer",
+          :type => 'string'
+
 attribute "hopsworks/python_library_updates_monitor_interval",
           :description => "Interval for monitoring new releases for libraries",
           :type => 'string'
@@ -853,7 +865,7 @@ attribute "hopsworks/jwt/signature_algorithm",
           :type => 'string'
 
 attribute "hopsworks/jwt/lifetime_ms",
-          :description => "Default lifetime in ms for jwt expiration. (default 2.2.000)",
+          :description => "Default lifetime in ms for jwt expiration. (default 2.3.000)",
           :type => 'string'
 
 attribute "hopsworks/jwt/exp_leeway_sec",
@@ -996,3 +1008,11 @@ attribute "hopsworks/docker-job/docker_job_mounts_allowed",
 attribute "hopsworks/docker-job/docker_job_uid_strict",
 					:description => "Enable or disable strict mode for uig/gid of docker jobs. In strict mode, users cannot set the uid/gid of the job.",
 					:type => "string"
+
+attribute "hopsworks/enable_user_search",
+          :description => "Whether to enable user search or not",
+          :type => 'string'
+      
+attribute "hopsworks/kubernetes/api_max_attempts",
+          :description => "Maximum number of Kubernetes client retries before failing the request. Default: 12",
+          :type => 'string'

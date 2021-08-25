@@ -107,7 +107,7 @@ default['hopsworks']['tensorboard_max_last_accessed'] = "1140000"
 #Max number of bytes of logs to show in Spark UI
 default['hopsworks']['spark_ui_logs_offset'] = "512000"
 #Log level of REST API
-default['hopsworks']['hopsworks_rest_log_level'] = "PROD"
+default['hopsworks']['hopsworks_rest_log_level'] = "TEST"
 
 default['hopsworks']['mysql_connector_url']         = "#{node['download_url']}/mysql-connector-java-8.0.21-bin.jar"
 
@@ -268,9 +268,10 @@ default['tensorboard']['max']['reload']['threads']          = "1"
 #
 # PyPi
 #
-default['hopsworks']['pypi_rest_endpoint']             = "https://pypi.org/pypi/{package}/json"
-default['hopsworks']['pypi_indexer_timer_interval']    = "1d"
-default['hopsworks']['pypi_simple_endpoint']           = "https://pypi.org/simple/"
+default['hopsworks']['pypi_rest_endpoint']                         = "https://pypi.org/pypi/{package}/json"
+default['hopsworks']['pypi_indexer_timer_interval']                = "1d"
+default['hopsworks']['pypi_indexer_timer_enabled']                 = "true"
+default['hopsworks']['pypi_simple_endpoint']                       = "https://pypi.org/simple/"
 default['hopsworks']['python_library_updates_monitor_interval']    = "1d"
 
 # Hive
@@ -400,9 +401,6 @@ default['hopsworks']['expat_dir']                    = "#{node['install']['dir']
 default['hopsworks']['featurestore_default_storage_format']   = "PARQUET"
 default['hopsworks']['featurestore_online']                   = "false"
 
-default['scala']['version']                   = "2.11.8"
-default['scala']['download_url']              = "#{node['download_url']}/scala-#{node['scala']['version']}.rpm"
-
 #
 # Glassfish Http configuration
 #
@@ -462,3 +460,7 @@ default['hopsworks']['livy_startup_timeout']           = "240"
 default['hopsworks']['docker-job']['docker_job_mounts_list']    = ""
 default['hopsworks']['docker-job']['docker_job_mounts_allowed'] = "false"
 default['hopsworks']['docker-job']['docker_job_uid_strict'] = "true"
+
+default['hopsworks']['enable_user_search'] = "true"
+
+default['hopsworks']['kubernetes']['api_max_attempts']        = "12"

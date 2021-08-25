@@ -97,6 +97,13 @@ group node['hops']['group'] do
   not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
+group node['hopsmonitor']['group'] do
+  action :modify
+  members ["#{node['hopsworks']['user']}"]
+  append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
+end
+
 #update permissions of base_dir to 770
 directory node['jupyter']['base_dir']  do
   owner node['hops']['yarnapp']['user']
@@ -130,35 +137,9 @@ when "debian"
   if node['platform_version'].to_f <= 14.04
     node.override['hopsworks']['systemd'] = "false"
   end
-#  package ["dtrx", "libkrb5-dev"]
-  package ["p7zip-full", "libkrb5-dev"]
+  package ["dtrx", "libkrb5-dev"]
 
-  remote_file "#{Chef::Config['file_cache_path']}/dtrx.tar.gz" do
-    user node['glassfish']['user']
-    group node['glassfish']['group']
-    source node['dtrx']['download_url']
-    mode 0755
-    action :create
-  end
-
-  bash "unpack_dtrx" do
-    user "root"
-    code <<-EOF
-      set -e
-      cd #{Chef::Config['file_cache_path']}
-      tar -xzf dtrx.tar.gz
-      cd dtrx-7.1
-      python setup.py install --prefix=/usr/local
-      # dtrx expects 7z to on its path. create a symbolic link from /bin/7z to /bin/7za
-      rm -f /bin/7z
-      ln -s /bin/7za /bin/7z
-    EOF
-    not_if "which dtrx"
-  end
-
-  dtrx="/usr/local/bin/dtrx"
-# dtrx="dtrx"
-
+  dtrx="dtrx"
 when "rhel"
   package ["krb5-libs", "p7zip"]
 
@@ -808,6 +789,7 @@ bash "unpack_flyway" do
     fi
     ln -s #{flyway} flyway
   EOF
+  not_if { Dir.exist?("#{theDomain}/#{flyway}")}
 end
 
 template "#{theDomain}/flyway/conf/flyway.conf" do

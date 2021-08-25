@@ -342,12 +342,12 @@ begin
     user "root"
     code <<-EOF
       set -e
-      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['kkafka']['mysql']['user']}\'@\'%\' IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
-      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'%\'\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
+      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\' IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
+      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\'\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
     EOF
   end
 rescue
@@ -837,9 +837,9 @@ if node['hopsworks']['http_logs']['enabled'].eql? "true"
   # Setup cron job for HDFS dumper
   cron 'dump_http_logs_to_hdfs' do
     if node['hopsworks']['systemd'] == "true"
-      command "#systemd-cat #{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh"
+      command "systemd-cat #{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh"
     else #sysv
-      command "##{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh >> #{domains_dir}/#{domain_name}/logs/web_dumper.log 2>&1"
+      command "#{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh >> #{domains_dir}/#{domain_name}/logs/web_dumper.log 2>&1"
     end
     user node['glassfish']['user']
     minute '0'
@@ -853,7 +853,7 @@ end
 if node['hopsworks']['audit_log_dump_enabled'].eql? "true"
   # Setup cron job for HDFS dumper
   cron 'dump_audit_logs_to_hdfs' do
-    command "#systemd-cat #{domains_dir}/#{domain_name}/bin/dump_audit_logs_to_hdfs.sh"
+    command "systemd-cat #{domains_dir}/#{domain_name}/bin/dump_audit_logs_to_hdfs.sh"
     user node['glassfish']['user']
     minute '0'
     hour '21'
@@ -1053,32 +1053,6 @@ template "#{::Dir.home(node['hopsworks']['user'])}/.pip/pip.conf" do
   action :create
 end
 
-case node['platform_family']
- when 'debian'
-   package "scala"
-
- when 'rhel'
-
-  scala_rpm_path="#{Chef::Config['file_cache_path']}/scala-#{node['scala']['version']}.rpm"
-  remote_file scala_rpm_path do
-    source node['scala']['download_url']
-    owner 'root'
-    group 'root'
-    mode '0755'
-    action :create
-  end
-
-  bash 'scala-install-redhat' do
-    user "root"
-    cwd Chef::Config['file_cache_path']
-    code <<-EOF
-      set -e
-      yum install -y scala-#{node['scala']['version']}.rpm
-    EOF
-    not_if "which scala"
-  end
-end
-
 homedir = "/home/#{node['hopsworks']['user']}"
 #
 # Disable glassfish service, if node['services']['enabled'] is not set to true
@@ -1188,12 +1162,12 @@ end
 hopsworks_certs "generate-int-certs" do
   subject     "/CN=#{consul_helper.get_service_fqdn("hopsworks.glassfish")}/OU=0"
   action      :generate_int_certs
-  not_if      (::File.exist?("#{node['hopsworks']['config_dir']}/internal_bundle.crt"))
+  not_if      { ::File.exist?("#{node['hopsworks']['config_dir']}/internal_bundle.crt") }
 end
 
 hopsworks_certs "download_azure_ca_cert" do
   action      :download_azure_ca_cert
-  not_if      (::File.exist?("/tmp/DigiCertGlobalRootG2.crt"))
+  not_if      { ::File.exist?("/tmp/DigiCertGlobalRootG2.crt") }
 end
 
 # Force reload of the certificate
