@@ -78,13 +78,20 @@ bash 'create_hopsworks_db' do
       set -e
       #{exec} -e \"CREATE DATABASE IF NOT EXISTS #{node['hopsworks']['db']} CHARACTER SET latin1\"
       #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\' IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']}\';\"
+      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['hopsworks']['mysql']['user']}\'@\'%\' IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']}\';\"
       #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hopsworks']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hopsworks']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       #{exec} -e \"GRANT SELECT ON #{node['hops']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hops']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       # Hopsworks needs to the quotas tables
       #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.yarn_projects_quota TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.yarn_projects_quota TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.hdfs_directory_with_quota_feature TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.hdfs_directory_with_quota_feature TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       #{exec} -e \"GRANT SELECT ON metastore.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON metastore.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
     EOF
 end
 
