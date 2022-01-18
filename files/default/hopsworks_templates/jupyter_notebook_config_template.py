@@ -53,7 +53,6 @@ os.environ['REQUESTS_VERIFY'] = "${conf.requestsVerify?c}"
 os.environ['DOMAIN_CA_TRUSTSTORE'] = "${conf.domainCATruststore}"
 os.environ['HADOOP_HOME'] = "${conf.hadoopHome}"
 os.environ['SERVICE_DISCOVERY_DOMAIN'] = "${conf.serviceDiscoveryDomain}"
-#os.environ['KAFKA_BROKERS'] = "${conf.kafkaBrokers}"
 os.environ['SECRETS_DIR'] = "${conf.secretDirectory}"
 
 <#if conf.kafkaBrokers?has_content>
