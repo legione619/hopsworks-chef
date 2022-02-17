@@ -35,7 +35,7 @@ bash 'certificateauthority' do
 
 	    #3 Create the root certificate
 #	    [ -f certs/ca.cert.pem ] || openssl req -subj "/C=SE/ST=Sweden/L=Stockholm/O=SICS/CN=HopsRootCA" -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -key private/ca.key.pem -new -x509 -days 7300 -sha256 -extensions v3_ca -out certs/ca.cert.pem
-            [ -f certs/ca.cert.pem ] || openssl req -subj "/C=IT/ST=Italia/L=Roma/O=Almaviva S.P.A./CN=GiottoPlatformRootCA" -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -key private/ca.key.pem -new -x509 -days 7300 -sha256 -extensions v3_ca -out certs/ca.cert.pem
+            [ -f certs/ca.cert.pem ] || openssl req -subj "/C=IT/ST=Italia/L=Roma/O=Almaviva S.P.A./CN=DataPlatformRootCA" -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -key private/ca.key.pem -new -x509 -days 7300 -sha256 -extensions v3_ca -out certs/ca.cert.pem
 	    chmod 444 certs/ca.cert.pem
 
       ####
@@ -58,7 +58,7 @@ bash 'certificateauthority' do
       # Done on client
 #	    [ -f intermediate/csr/intermediate.csr.pem ] || openssl req -new -sha256 -subj "/C=SE/ST=Sweden/L=Stockholm/O=SICS/CN=HopsIntermediateCA" \
 #        -key intermediate/private/intermediate.key.pem -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -out intermediate/csr/intermediate.csr.pem
-           [ -f intermediate/csr/intermediate.csr.pem ] || openssl req -new -sha256 -subj "/C=IT/ST=Italia/L=Roma/O=Almaviva S.P.A./CN=GiottoPlatformIntermediateCA" \
+           [ -f intermediate/csr/intermediate.csr.pem ] || openssl req -new -sha256 -subj "/C=IT/ST=Italia/L=Roma/O=Almaviva S.P.A./CN=DataPlatformIntermediateCA" \
         -key intermediate/private/intermediate.key.pem -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -out intermediate/csr/intermediate.csr.pem
 
 
