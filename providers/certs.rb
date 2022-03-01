@@ -34,8 +34,8 @@ bash 'certificateauthority' do
 	    chmod 400 private/ca.key.pem
 
 	    #3 Create the root certificate
-#	    [ -f certs/ca.cert.pem ] || openssl req -subj "/C=SE/ST=Sweden/L=Stockholm/O=SICS/CN=HopsRootCA" -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -key private/ca.key.pem -new -x509 -days 7300 -sha256 -extensions v3_ca -out certs/ca.cert.pem
-            [ -f certs/ca.cert.pem ] || openssl req -subj "/C=IT/ST=Italia/L=Roma/O=Almaviva S.P.A./CN=DataPlatformRootCA" -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -key private/ca.key.pem -new -x509 -days 7300 -sha256 -extensions v3_ca -out certs/ca.cert.pem
+	    [ -f certs/ca.cert.pem ] || openssl req -subj "/C=SE/ST=Sweden/L=Stockholm/O=SICS/CN=HopsRootCA" -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -key private/ca.key.pem -new -x509 -days 7300 -sha256 -extensions v3_ca -out certs/ca.cert.pem
+
 	    chmod 444 certs/ca.cert.pem
 
       ####
@@ -56,9 +56,7 @@ bash 'certificateauthority' do
 
 	    #6 Create the intermediate certificate
       # Done on client
-#	    [ -f intermediate/csr/intermediate.csr.pem ] || openssl req -new -sha256 -subj "/C=SE/ST=Sweden/L=Stockholm/O=SICS/CN=HopsIntermediateCA" \
-#        -key intermediate/private/intermediate.key.pem -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -out intermediate/csr/intermediate.csr.pem
-           [ -f intermediate/csr/intermediate.csr.pem ] || openssl req -new -sha256 -subj "/C=IT/ST=Italia/L=Roma/O=Almaviva S.P.A./CN=DataPlatformIntermediateCA" \
+	    [ -f intermediate/csr/intermediate.csr.pem ] || openssl req -new -sha256 -subj "/C=SE/ST=Sweden/L=Stockholm/O=SICS/CN=HopsIntermediateCA" \
         -key intermediate/private/intermediate.key.pem -passin pass:${KEYSTOREPW} -passout pass:${KEYSTOREPW} -out intermediate/csr/intermediate.csr.pem
 
 
@@ -167,6 +165,7 @@ action :generate_int_certs do
               json_response = ::JSON.parse(response.body)
               ::File.write("#{node['hopsworks']['config_dir']}/internal.crt", json_response['signedCert'])
             else
+              puts "The Response -> #{response.body}"
               raise "Error signing certificate"
             end
         else

@@ -19,16 +19,16 @@
     </services>
 
     <kube>
-        <user></user>
-        <masterUrl></masterUrl>
-        <caPath></caPath>
-        <tstorePath></tstorePath>
-        <tstorePwd></tstorePwd>
-        <kstorePath></kstorePath>
-        <kstorePwd></kstorePwd>
-        <certFile></certFile>
-        <keyFile></keyFile>
-        <keyPwd></keyPwd>
+        <user><%= @kube_hopsworks_user %></user>
+        <masterUrl><%= @kube_master_url %></masterUrl>
+        <caPath><%= node["certs"]["dir"] %>/kube/certs/kube-ca.cert.pem</caPath>
+        <tstorePath><%= node["certs"]["dir"] %>/kube/hopsworks/hopsworks__tstore.jks</tstorePath>
+        <tstorePwd><%= @kube_hopsworks_cert_pwd %></tstorePwd>
+        <kstorePath><%= node["certs"]["dir"] %>/kube/hopsworks/hopsworks__kstore.jks</kstorePath>
+        <kstorePwd><%= @kube_hopsworks_cert_pwd %></kstorePwd>
+        <certFile><%= node["certs"]["dir"] %>/kube/hopsworks/hopsworks.cert.pem</certFile>
+        <keyFile><%= node["certs"]["dir"] %>/kube/hopsworks/hopsworks.key.pem</keyFile>
+        <keyPwd><%= @kube_hopsworks_cert_pwd %></keyPwd>
     </kube>
 
     <hopsworks>
@@ -59,6 +59,19 @@
     <elastic>
         <user><%= node['elastic']['opendistro_security']['admin']['username'] %></user>
         <pass><%= node['elastic']['opendistro_security']['admin']['password'] %></pass>
+        <services-logs-user><%= node['elastic']['opendistro_security']['service_log_viewer']['username'] %></services-logs-user>
+        <services-logs-pass><%= node['elastic']['opendistro_security']['service_log_viewer']['password'] %></services-logs-pass>
+        <snapshot>
+            <repo>
+                <name>expat</name>
+                <location><%= node['elastic']['backup_dir'] %>/expat</location>
+            </repo>
+            <name>expat_backup</name>
+            <!-- repeated section for multiple indices -->
+            <indices></indices>
+            <!-- should elastic silently ignore missing indices. when false, a missing index will throw an exception -->
+            <ignoreUnavailable>false</ignoreUnavailable>
+        </snapshot>
     </elastic>
 
     <hops>
@@ -66,6 +79,10 @@
             <user><%= node['hops']['hdfs']['user'] %></user>
         </client>
     </hops>
+
+    <epipe>
+        <path><%= node['epipe']['base_dir'] %></path>
+    </epipe>
     
     <version-06>
         io.hops.hopsworks.expat.migrations.x509.GenerateProjectCertificates
@@ -103,10 +120,25 @@
         io.hops.hopsworks.expat.migrations.conda.DockerConda
         io.hops.hopsworks.expat.migrations.dataset.FixDatasetPermission
     </version-14>
-    
+     <version-20>
+        io.hops.hopsworks.expat.migrations.projects.appprovenance.ReindexV1
+    </version-20>
     <version-23>
         io.hops.hopsworks.expat.migrations.docker.JobsDockerResourcesMigration
         io.hops.hopsworks.expat.migrations.docker.JupyterDockerResourcesMigration
+        io.hops.hopsworks.expat.migrations.docker.ServingDockerResourcesMigration
         io.hops.hopsworks.expat.migrations.docker.JobsDockerCommandArgsMigration
+        io.hops.hopsworks.expat.migrations.kafka.InferenceSchemaV4Migration
+        io.hops.hopsworks.expat.migrations.serving.ModelArtifactMigration
     </version-23>
+    <version-24>
+        io.hops.hopsworks.expat.migrations.alertmanager.FixAlertManagerReceiver
+        io.hops.hopsworks.expat.migrations.elk.ServicesLogs
+    </version-24>
+    <version-25>
+        io.hops.hopsworks.expat.migrations.projects.search.featurestore.UpdateFeaturegroupsForType
+        io.hops.hopsworks.expat.migrations.elk.BaseIndexTemplateMigrate
+        io.hops.hopsworks.expat.migrations.serving.ServingApiKeysMigration
+        io.hops.hopsworks.expat.migrations.serving.PythonArtifactMigration
+    </version-25>
 </expat>

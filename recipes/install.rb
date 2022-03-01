@@ -6,23 +6,20 @@ domain_name="domain1"
 domains_dir = node['hopsworks']['domains_dir']
 theDomain="#{domains_dir}/#{domain_name}"
 password_file = "#{theDomain}_admin_passwd"
+namenode_fdqn = consul_helper.get_service_fqdn("rpc.namenode")
+glassfish_fdqn = consul_helper.get_service_fqdn("glassfish")
 
 bash "systemd_reload_for_glassfish_failures" do
   user "root"
   ignore_failure true
   code <<-EOF
-    systemctl stop glassfish-#{domain_name}
     systemctl daemon-reload
+    systemctl stop glassfish-#{domain_name}
   EOF
 end
 
-if node['hopsworks']['systemd'] == "true"
-  systemd = true
-else
-  systemd = false
-end
-
 group node['hopsworks']['group'] do
+  gid node['hopsworks']['group_id']
   action :create
   not_if "getent group #{node['hopsworks']['group']}"
   not_if { node['install']['external_users'].casecmp("true") == 0 }
@@ -31,14 +28,16 @@ end
 #
 # hdfs superuser group is 'hdfs'
 #
-group node['hops']['hdfs']['user'] do
+group node['hops']['hdfs']['group'] do
+  gid node['hops']['hdfs']['group_id']
   action :create
-  not_if "getent group #{node['hops']['hdfs']['user']}"
+  not_if "getent group #{node['hops']['hdfs']['group']}"
   not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
 
 user node['hopsworks']['user'] do
   home node['glassfish']['user-home']
+  uid node['hopsworks']['user_id']
   gid node['hopsworks']['group']
   action :create
   shell "/bin/bash"
@@ -55,30 +54,10 @@ group node["kagent"]["certs_group"] do
   only_if { conda_helpers.is_upgrade }
 end
 
-group node['conda']['group'] do
-  action :modify
-  members ["#{node['hopsworks']['user']}"]
-  append true
-  not_if { node['install']['external_users'].casecmp("true") == 0 }
-end
-
 # Add to the hdfs superuser group
-group node['hops']['hdfs']['user'] do
+group node['hops']['hdfs']['group'] do
   action :modify
   members ["#{node['hopsworks']['user']}"]
-  append true
-  not_if { node['install']['external_users'].casecmp("true") == 0 }
-end
-
-group node['kagent']['userscerts_group'] do
-  action :create
-  not_if "getent group #{node['kagent']['userscerts_group']}"
-  not_if { node['install']['external_users'].casecmp("true") == 0 }
-end
-
-group node['kagent']['userscerts_group'] do
-  action :modify
-  members node['hopsworks']['user']
   append true
   not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
@@ -100,6 +79,30 @@ end
 group node['hopsmonitor']['group'] do
   action :modify
   members ["#{node['hopsworks']['user']}"]
+  append true
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
+end
+
+group node['logger']['group'] do
+  gid node['logger']['group_id']
+  action :create
+  not_if "getent group #{node['logger']['group']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
+end
+
+user node['logger']['user'] do
+  uid node['logger']['user_id']
+  gid node['logger']['group_id']
+  shell "/bin/nologin"
+  action :create
+  system true
+  not_if "getent passwd #{node['logger']['user']}"
+  not_if { node['install']['external_users'].casecmp("true") == 0 }
+end
+
+group node["hopsworks"]["group"] do
+  action :modify
+  members [node['logger']['user']]
   append true
   not_if { node['install']['external_users'].casecmp("true") == 0 }
 end
@@ -128,78 +131,14 @@ directory domains_dir  do
   not_if "test -d #{domains_dir}"
 end
 
-
-# For unzipping files
-dtrx=""
-case node['platform_family']
-when "debian"
-
-  if node['platform_version'].to_f <= 14.04
-    node.override['hopsworks']['systemd'] = "false"
-  end
-#  package ["dtrx", "libkrb5-dev"]
-
-  package ["p7zip-full", "libkrb5-dev"]
-
-  remote_file "#{Chef::Config['file_cache_path']}/dtrx.tar.gz" do
-    user node['glassfish']['user']
-    group node['glassfish']['group']
-    source node['dtrx']['download_url']
-    mode 0755
-    action :create
-  end
-
-  bash "unpack_dtrx" do
-    user "root"
-    code <<-EOF
-      set -e
-      cd #{Chef::Config['file_cache_path']}
-      tar -xzf dtrx.tar.gz
-      cd dtrx-7.1
-      python setup.py install --prefix=/usr/local
-      # dtrx expects 7z to on its path. create a symbolic link from /bin/7z to /bin/7za
-      rm -f /bin/7z
-      ln -s /bin/7za /bin/7z
-    EOF
-    not_if "which dtrx"
-  end
-
-  dtrx="/usr/local/bin/dtrx"
-
-#  dtrx="dtrx"
-when "rhel"
-  package ["krb5-libs", "p7zip"]
-
-  remote_file "#{Chef::Config['file_cache_path']}/dtrx.tar.gz" do
-    user node['glassfish']['user']
-    group node['glassfish']['group']
-    source node['dtrx']['download_url']
-    mode 0755
-    action :create
-  end
-
-  bash "unpack_dtrx" do
-    user "root"
-    code <<-EOF
-      set -e
-      cd #{Chef::Config['file_cache_path']}
-      tar -xzf dtrx.tar.gz
-      cd dtrx-7.1
-      python setup.py install --prefix=/usr/local
-      # dtrx expects 7z to on its path. create a symbolic link from /bin/7z to /bin/7za
-      rm -f /bin/7z
-      ln -s /bin/7za /bin/7z
-    EOF
-    not_if "which dtrx"
-  end
-  dtrx="/usr/local/bin/dtrx"
-end
-
 # Install authbind to allow glassfish to bind on ports < 1024
+# and Kerberos libraries for SSO
 case node['platform_family']
 when "debian"
-  package "authbind"
+  package ["libkrb5-dev", "authbind"]
 when "rhel"
+  package ["krb5-libs"]
+
   authbind_rpm = ::File.basename(node['authbind']['download_url'])
 
   remote_file "#{Chef::Config['file_cache_path']}/#{authbind_rpm}" do
@@ -247,7 +186,7 @@ node.override = {
     'domains' => {
       domain_name => {
         'config' => {
-          'systemd_enabled' => systemd,
+          'systemd_enabled' => true,
           'systemd_start_timeout' => 900,
           'min_memory' => node['glassfish']['min_mem'],
           'max_memory' => node['glassfish']['max_mem'],
@@ -262,7 +201,7 @@ node.override = {
           'remote_access' => false,
           'secure' => false,
           'environment_file' => node['hopsworks']['env_var_file'],
-          'jvm_options' => ["-DHADOOP_HOME=#{node['hops']['dir']}/hadoop", "-DHADOOP_CONF_DIR=#{node['hops']['dir']}/hadoop/etc/hadoop", '-Dcom.sun.enterprise.tools.admingui.NO_NETWORK=true', '-Dlog4j.configuration=file:///${com.sun.aas.instanceRoot}/config/log4j.properties']
+          'jvm_options' => ["-DHADOOP_HOME=#{node['hops']['dir']}/hadoop", "-DHADOOP_CONF_DIR=#{node['hops']['dir']}/hadoop/etc/hadoop", '-Dcom.sun.enterprise.tools.admingui.NO_NETWORK=true']
         },
         'extra_libraries' => {
           'jdbcdriver' => {
@@ -421,7 +360,36 @@ unless exists_local("hops_airflow", "default")
 end
 
 include_recipe 'glassfish::default'
-package 'openssl'
+
+directory node['data']['dir'] do
+  owner 'root'
+  group 'root'
+  mode '0775'
+  action :create
+  not_if { ::File.directory?(node['data']['dir']) }
+end
+
+directory node['hopsworks']['data_volume']['root_dir'] do
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0750'
+  not_if { ::File.directory?(node['hopsworks']['data_volume']['root_dir'])}
+end
+
+directory node['hopsworks']['data_volume']['domain1'] do
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0750'
+end
+
+directory node['hopsworks']['data_volume']['domain1_logs'] do
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0750'
+end
+
+
+package ["openssl", "zip"]
 
 if !::File.directory?("#{theDomain}/lib")
   include_recipe 'glassfish::attribute_driven_domain'
@@ -440,6 +408,41 @@ else
     end
   end
 end 
+
+# Domain and logs directory is created by glassfish cookbook.
+# Small hack to symlink logs directory
+directory node['hopsworks']['domain1']['logs'] do
+  recursive true
+  action :delete
+  not_if { conda_helpers.is_upgrade }
+end
+
+bash 'Move glassfish logs to data volume' do
+  user 'root'
+  code <<-EOH
+    set -e
+    mv -f #{node['hopsworks']['domain1']['logs']}/* #{node['hopsworks']['data_volume']['domain1_logs']}
+    mv -f #{node['hopsworks']['domain1']['logs']} #{node['hopsworks']['data_volume']['domain1_logs']}_deprecated
+  EOH
+  only_if { conda_helpers.is_upgrade }
+  only_if { File.directory?(node['hopsworks']['domain1']['logs'])}
+  not_if { File.symlink?(node['hopsworks']['domain1']['logs'])}
+end
+
+link node['hopsworks']['domain1']['logs'] do
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0750'
+  to node['hopsworks']['data_volume']['domain1_logs']
+end
+
+directory node['hopsworks']['audit_log_dir'] do
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode '0700'
+  action :create
+end
+
 
 mysql_connector = File.basename(node['hopsworks']['mysql_connector_url'])
 
@@ -471,29 +474,20 @@ remote_directory "#{theDomain}/templates" do
   files_mode 0550
 end
 
-directory node['hopsworks']['audit_log_dir'] do
-  owner node['glassfish']['user']
-  group node['glassfish']['group']
-  recursive true
-  mode '0700'
+directory "/etc/systemd/system/glassfish-#{domain_name}.service.d" do
+  owner "root"
+  group "root"
+  mode "755"
   action :create
 end
 
-if systemd == true
-  directory "/etc/systemd/system/glassfish-#{domain_name}.service.d" do
-    owner "root"
-    group "root"
-    mode "755"
-    action :create
-  end
 
-
-   template "/etc/systemd/system/glassfish-#{domain_name}.service.d/limits.conf" do
-     source "limits.conf.erb"
-     owner "root"
-     mode 0774
-     action :create
-   end
+template "/etc/systemd/system/glassfish-#{domain_name}.service.d/limits.conf" do
+  source "limits.conf.erb"
+  owner "root"
+  mode 0774
+  action :create
+end
 
 ulimit_domain node['hopsworks']['user'] do
   rule do
@@ -508,18 +502,46 @@ ulimit_domain node['hopsworks']['user'] do
   end
 end
 
-  kagent_config "glassfish-domain1" do 
-    action :systemd_reload
-  end
+kagent_config "glassfish-domain1" do 
+  action :systemd_reload
 end
 
-ca_dir = node['certs']['dir']
-
-directory ca_dir do
+directory node['certs']['data_volume']['dir'] do
   owner node['glassfish']['user']
   group node['kagent']['certs_group']
   mode "755"
   action :create
+end
+
+ca_dir = node['certs']['dir']
+
+bash 'Move system users x.509 to data volume' do
+  user 'root'
+  code <<-EOH
+    set -e
+    mv -f #{ca_dir}/* #{node['certs']['data_volume']['dir']}
+  EOH
+  only_if { conda_helpers.is_upgrade }
+  only_if { File.directory?(ca_dir)}
+  not_if { File.symlink?(ca_dir)}
+  not_if { Dir.empty?(ca_dir)}
+end
+
+bash 'Delete old users x.509 directory' do
+  user 'root'
+  code <<-EOH
+    set -e
+    rm -rf #{ca_dir}
+  EOH
+  only_if { conda_helpers.is_upgrade }
+  only_if { File.directory?(ca_dir)}
+  not_if { File.symlink?(ca_dir)}
+end
+
+link ca_dir do
+  owner node['glassfish']['user']
+  group node['kagent']['certs_group']
+  to node['certs']['data_volume']['dir']
 end
 
 master_password_digest = Digest::SHA256.hexdigest node['hopsworks']['encryption_password']
@@ -531,14 +553,7 @@ file "#{ca_dir}/encryption_master_password" do
   group node['glassfish']['group']
 end
 
-directory "#{ca_dir}/transient" do
-  owner node['glassfish']['user']
-  group node['kagent']['userscerts_group']
-  mode "750"
-  action :create
-end
-
-dirs = %w{certs crl newcerts private intermediate}
+dirs = %w{certs crl newcerts private intermediate transient}
 
 for d in dirs
   directory "#{ca_dir}/#{d}" do
@@ -578,14 +593,6 @@ template "#{ca_dir}/intermediate/openssl-intermediate.cnf" do
               :int_ca_dir =>  "#{ca_dir}/intermediate"
             })
   action :create
-end
-
-kagent_sudoers "ndb_backup" do 
-  user          node['glassfish']['user']
-  group         node['ndb']['group']
-  script_name   "ndb_backup.sh"
-  template      "ndb_backup.sh.erb"
-  run_as        node['ndb']['user']
 end
 
 kagent_sudoers "jupyter" do 
@@ -657,6 +664,14 @@ kagent_sudoers "ca-keystore" do
   only_if       { node['hopsworks']['dela']['enabled'].casecmp("true") == 0 }
 end
 
+kagent_sudoers "git" do
+  user          node['glassfish']['user']
+  group         "root"
+  script_name   "git.sh"
+  template      "git.sh.erb"
+  run_as        "ALL" # run this as root - inside we change to different users
+end
+
 command=""
 case node['platform']
  when 'debian', 'ubuntu'
@@ -681,17 +696,12 @@ template "#{theDomain}/bin/unzip-hdfs-files.sh" do
   owner node['glassfish']['user']
   group node['glassfish']['group']
   mode "550"
-  variables(lazy {
-    h = {}
-    h['dtrx'] = dtrx
-    h
-  })
   action :create
 end
 
 ["zip-hdfs-files.sh", "zip-background.sh", "unzip-background.sh",  "tensorboard-launch.sh",
  "tensorboard-cleanup.sh", "condasearch.sh", "list_environment.sh", "jupyter-kill.sh",
- "jupyter-launch.sh", "tfserving-kill.sh", "sklearn_serving-launch.sh", "sklearn_serving-kill.sh"].each do |script|
+ "jupyter-launch.sh", "tfserving-kill.sh", "sklearn_serving-launch.sh", "sklearn_serving-kill.sh", "git-container-kill.sh"].each do |script|
   template "#{theDomain}/bin/#{script}" do
     source "#{script}.erb"
     owner node['glassfish']['user']
@@ -701,6 +711,19 @@ end
   end
 end
 
+template "#{theDomain}/bin/git-container-launch.sh" do
+  source "git-container-launch.sh.erb"
+  owner node['glassfish']['user']
+  group node['glassfish']['group']
+  mode "500"
+  action :create
+  variables({
+              :glassfish_fdqn => glassfish_fdqn,
+              :namenode_fdqn => namenode_fdqn,
+              :namenode_port => node['hops']['nn']['port'],
+              :glassfish_port => node['hopsworks']['internal']['port']
+            })
+end
 
 ["sklearn_flask_server.py"].each do |script|
   template "#{theDomain}/bin/#{script}" do

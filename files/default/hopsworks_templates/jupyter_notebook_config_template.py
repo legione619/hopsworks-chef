@@ -33,8 +33,7 @@ c.KernelSpecManager.ensure_native_kernel=False
 #  sparkrkernel                  /usr/local/share/jupyter/kernels/sparkrkernel
 #  python2                       /usr/local/share/jupyter/kernels/python-kernel
 
-#c.NotebookApp.allow_origin = '${conf.allowOrigin}'
-c.NotebookApp.allow_origin = '*'
+c.NotebookApp.allow_origin = '${conf.allowOrigin}'
 c.NotebookApp.tornado_settings = {
     'ws_ping_interval': ${conf.wsPingInterval?c},
     'headers': {
@@ -53,11 +52,12 @@ os.environ['REQUESTS_VERIFY'] = "${conf.requestsVerify?c}"
 os.environ['DOMAIN_CA_TRUSTSTORE'] = "${conf.domainCATruststore}"
 os.environ['HADOOP_HOME'] = "${conf.hadoopHome}"
 os.environ['SERVICE_DISCOVERY_DOMAIN'] = "${conf.serviceDiscoveryDomain}"
-os.environ['SECRETS_DIR'] = "${conf.secretDirectory}"
 
 <#if conf.kafkaBrokers?has_content>
 os.environ['KAFKA_BROKERS'] = "${conf.kafkaBrokers}"
 </#if>
+
+os.environ['SECRETS_DIR'] = "${conf.secretDirectory}"
 
 c.GitHandlersConfiguration.api_key = "${conf.apiKey}"
 c.GitHandlersConfiguration.git_backend = "${conf.gitBackend}"

@@ -23,7 +23,6 @@ if node['hopsworks']['dela']['enabled'] == "true"
 end
 
 public_ip=my_public_ip()
-hopsworks_db = "hopsworks"
 realmname = "kthfsrealm"
 
 begin
@@ -31,20 +30,6 @@ begin
 rescue
   elastic_ips = ""
   Chef::Log.warn "could not find the elastic server ip for HopsWorks!"
-end
-
-begin
-  hopsworks_ip = private_recipe_ip("hopsworks","default")
-rescue
-  hopsworks_ip = ""
-  Chef::Log.warn "could not find the hopsworks server ip for HopsWorks!"
-end
-
-begin
-  jhs_ip = private_recipe_ip("hops","jhs")
-rescue
-  jhs_ip = node['hostname']
-  Chef::Log.warn "could not find the MR job history server ip!"
 end
 
 begin
@@ -69,7 +54,6 @@ rescue
 end
 
 
-
 exec = "#{node['ndb']['scripts_dir']}/mysql-client.sh"
 
 bash 'create_hopsworks_db' do
@@ -78,20 +62,13 @@ bash 'create_hopsworks_db' do
       set -e
       #{exec} -e \"CREATE DATABASE IF NOT EXISTS #{node['hopsworks']['db']} CHARACTER SET latin1\"
       #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\' IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']}\';\"
-      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['hopsworks']['mysql']['user']}\'@\'%\' IDENTIFIED BY \'#{node['hopsworks']['mysql']['password']}\';\"
       #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
-      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hopsworks']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
-      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hopsworks']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       #{exec} -e \"GRANT SELECT ON #{node['hops']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hops']['db']}.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       # Hopsworks needs to the quotas tables
       #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.yarn_projects_quota TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
-      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.yarn_projects_quota TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.hdfs_directory_with_quota_feature TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
-      #{exec} -e \"GRANT ALL PRIVILEGES ON #{node['hops']['db']}.hdfs_directory_with_quota_feature TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
       #{exec} -e \"GRANT SELECT ON metastore.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'127.0.0.1\';\"
-      #{exec} -e \"GRANT SELECT ON metastore.* TO \'#{node['hopsworks']['mysql']['user']}\'@\'%\';\"
     EOF
 end
 
@@ -255,8 +232,6 @@ for version in versions do
          :user_cert_valid_days => node['hopsworks']['cert']['user_cert_valid_days'],
          :conda_repo => condaRepo,
          :hosts => hosts,
-         :jhs_ip => jhs_ip,
-         :hopsworks_ip => hopsworks_ip,
          :elastic_ip => elastic_ips,
          :yarn_ui_ip => public_recipe_ip("hops","rm"),
          :hdfs_ui_ip => public_recipe_ip("hops","nn"),
@@ -300,6 +275,17 @@ for version in versions do
     mode 0750
     action :create
   end
+
+  if Gem::Version.new(version) >= Gem::Version.new('2.0.0')
+    cookbook_file "#{theDomain}/flyway/all/sql/V#{version}__initial_tables.sql" do
+      source "sql/ddl/#{version}__initial_tables.sql"
+      owner node['glassfish']['user']
+      group node['glassfish']['group']
+      mode 0750
+      action :create
+    end
+  end 
+  
 end
 
 if !current_version.eql?("") && Gem::Version.new(current_version) < Gem::Version.new('0.6.0')
@@ -349,18 +335,12 @@ begin
     user "root"
     code <<-EOF
       set -e
-#      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\' IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
-#      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
-#      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
-#      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\'\"
-#      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
-#      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
-      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['kkafka']['mysql']['user']}\'@\'%\' IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
-      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'%\'\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"
-      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'%\';\"      
+      #{exec} -e \"CREATE USER IF NOT EXISTS \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\' IDENTIFIED BY \'#{node['kkafka']['mysql']['password']}\';\"
+      #{exec} -e \"GRANT NDB_STORED_USER ON *.* TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.topic_acls TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\'\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.users TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
+      #{exec} -e \"GRANT SELECT ON #{node['hopsworks']['db']}.project_team TO \'#{node['kkafka']['mysql']['user']}\'@\'127.0.0.1\';\"
     EOF
   end
 rescue
@@ -389,13 +369,6 @@ template "#{domains_dir}/#{domain_name}/config/login.conf" do
   group node['glassfish']['group']
   mode "0600"
   action :create
-end
-
-template "#{domains_dir}/#{domain_name}/config/log4j.properties" do
-  cookbook 'hopsworks'
-  source "log4j.properties.erb"
-  owner node['glassfish']['user']
-  group node['glassfish']['group']
 end
 
 # Add Hadoop glob classpath and HADOOP_CONF_DIR to Glassfish
@@ -477,7 +450,8 @@ props =  {
      'two-factor-column' => 'two_factor',
      'user-status-column' => 'status',
      'yubikey-table' => 'hopsworks.yubikey',
-     'variables-table' => 'hopsworks.variables'
+     'variables-table' => 'hopsworks.variables',
+     'user-account-type-column' => 'mode'
  }
 
  glassfish_auth_realm "cauthRealm" do
@@ -548,6 +522,9 @@ glassfish_conf = {
   'configs.config.server-config.network-config.network-listeners.network-listener.http-listener-1.enabled' => false,
   # Make sure the https listener is listening on the requested port
   'configs.config.server-config.network-config.network-listeners.network-listener.http-listener-2.port' => node['hopsworks']['https']['port'],
+  # Disable X-Powered-By and server headers
+  'configs.config.server-config.network-config.protocols.protocol.http-listener-2.http.server-header' => false,
+  'configs.config.server-config.network-config.protocols.protocol.http-listener-2.http.xpowered-by' => false,
   # Disable SSL3
   'server.network-config.protocols.protocol.http-listener-2.ssl.ssl3-enabled' => false,
   'server.network-config.protocols.protocol.sec-admin-listener.ssl.ssl3-enabled' => false,
@@ -850,7 +827,7 @@ if node['hopsworks']['http_logs']['enabled'].eql? "true"
   # Setup cron job for HDFS dumper
   cron 'dump_http_logs_to_hdfs' do
     if node['hopsworks']['systemd'] == "true"
-      command "#systemd-cat #{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh"
+      command "systemd-cat #{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh"
     else #sysv
       command "#{domains_dir}/#{domain_name}/bin/dump_web_logs_to_hdfs.sh >> #{domains_dir}/#{domain_name}/logs/web_dumper.log 2>&1"
     end
@@ -866,7 +843,7 @@ end
 if node['hopsworks']['audit_log_dump_enabled'].eql? "true"
   # Setup cron job for HDFS dumper
   cron 'dump_audit_logs_to_hdfs' do
-    command "#systemd-cat #{domains_dir}/#{domain_name}/bin/dump_audit_logs_to_hdfs.sh"
+    command "systemd-cat #{domains_dir}/#{domain_name}/bin/dump_audit_logs_to_hdfs.sh"
     user node['glassfish']['user']
     minute '0'
     hour '21'
@@ -882,6 +859,11 @@ hopsworks_mail "gmail" do
    username username
    admin_port admin_port
    action :jndi
+end
+
+# Reload glassfish with new configuration 
+kagent_config "glassfish-domain1" do
+  action :systemd_reload
 end
 
 node.override['glassfish']['asadmin']['timeout'] = 400
@@ -1026,19 +1008,13 @@ glassfish_deployable "undeploy_hopsworks-ca" do
   action :undeploy
 end
 
-
-template "/bin/hopsworks-2fa" do
-    source "hopsworks-2fa.erb"
-    owner "root"
-    mode 0700
-    action :create
-end
-
 hopsworks_certs "generate-certs" do
   action :generate
 end
 
-template "#{::Dir.home(node['hopsworks']['user'])}/.condarc" do
+hopsworks_user_home = conda_helpers.get_user_home(node['hopsworks']['user'])
+
+template "#{hopsworks_user_home}/.condarc" do
   source "condarc.erb"
   cookbook "conda"
   owner node['glassfish']['user']
@@ -1050,14 +1026,14 @@ template "#{::Dir.home(node['hopsworks']['user'])}/.condarc" do
   action :create
 end
 
-directory "#{::Dir.home(node['hopsworks']['user'])}/.pip" do
+directory "#{hopsworks_user_home}/.pip" do
   owner node['glassfish']['user']
   group node['glassfish']['group']
   mode '0700'
   action :create
 end
 
-template "#{::Dir.home(node['hopsworks']['user'])}/.pip/pip.conf" do
+template "#{hopsworks_user_home}/.pip/pip.conf" do
   source "pip.conf.erb"
   cookbook "conda"
   owner node['glassfish']['user']
@@ -1066,7 +1042,6 @@ template "#{::Dir.home(node['hopsworks']['user'])}/.pip/pip.conf" do
   action :create
 end
 
-homedir = "/home/#{node['hopsworks']['user']}"
 #
 # Disable glassfish service, if node['services']['enabled'] is not set to true
 #
@@ -1126,13 +1101,13 @@ directory node['hopsworks']['conda_cache'] do
   action :create
 end
 
-kagent_keys "#{homedir}" do
+kagent_keys "#{hopsworks_user_home}" do
   cb_user node['hopsworks']['user']
   cb_group node['hopsworks']['group']
   action :generate
 end
 
-kagent_keys "#{homedir}" do
+kagent_keys "#{hopsworks_user_home}" do
   cb_user node['hopsworks']['user']
   cb_group node['hopsworks']['group']
   cb_name "hopsworks"
@@ -1148,11 +1123,27 @@ if node['kagent']['enabled'].casecmp? "true"
   end
 end
 
+hopsworks_certs "generate-int-certs" do
+  subject     "/CN=#{consul_helper.get_service_fqdn("hopsworks.glassfish")}/OU=0"
+  action      :generate_int_certs
+  not_if      { ::File.exist?("#{node['hopsworks']['config_dir']}/internal_bundle.crt") }
+end
+
+hopsworks_certs "download_azure_ca_cert" do
+  action      :download_azure_ca_cert
+  not_if      { ::File.exist?("/tmp/DigiCertGlobalRootG2.crt") }
+end
+
+# Force reload of the certificate
+kagent_config "glassfish-domain1" do
+  action :systemd_reload
+end
+
 # Generate a service JWT token and renewal one-time tokens to be used internally in Hopsworks
 ruby_block "generate_service_jwt" do
   block do
     master_token, renew_tokens = get_service_jwt()
-    sql_command_template = "#{node['ndb']['scripts_dir']}/mysql-client.sh -e \"REPLACE INTO hopsworks.variables(id, value) VALUE ('%s', '%s');\""
+    sql_command_template = "#{node['ndb']['scripts_dir']}/mysql-client.sh -e \"REPLACE INTO hopsworks.variables(id, value, hide) VALUE ('%s', '%s', 1);\""
     master_token_command = sql_command_template % ['service_master_jwt', master_token]
     execute_shell_command master_token_command
 
@@ -1168,22 +1159,6 @@ ruby_block "generate_service_jwt" do
 end
 
 # Force variables reload
-kagent_config "glassfish-domain1" do 
-  action :systemd_reload
-end
-
-hopsworks_certs "generate-int-certs" do
-  subject     "/CN=#{consul_helper.get_service_fqdn("hopsworks.glassfish")}/OU=0"
-  action      :generate_int_certs
-  not_if      { ::File.exist?("#{node['hopsworks']['config_dir']}/internal_bundle.crt") }
-end
-
-hopsworks_certs "download_azure_ca_cert" do
-  action      :download_azure_ca_cert
-  not_if      { ::File.exist?("/tmp/DigiCertGlobalRootG2.crt") }
-end
-
-# Force reload of the certificate
 kagent_config "glassfish-domain1" do 
   action :systemd_reload
 end
@@ -1209,29 +1184,15 @@ template "#{domains_dir}/#{domain_name}/bin/letsencrypt.sh" do
   action :create
 end
 
-directory "/usr/local/share/jupyter/nbextensions/witwidget"  do
-  owner "root"
-  group "root"
-  mode "775"
-  action :create
-  recursive true
-end
+Chef::Log.info "Home dir is #{hopsworks_user_home}. Generating ssh keys..."
 
-#
-# Need to synchronize conda enviornments for newly joined or rejoining nodes.
-#
-package "rsync"
-
-homedir = node['hopsworks']['user'].eql?("root") ? "/root" : "/home/#{node['hopsworks']['user']}"
-Chef::Log.info "Home dir is #{homedir}. Generating ssh keys..."
-
-kagent_keys "#{homedir}" do
+kagent_keys "#{hopsworks_user_home}" do
   cb_user node['hopsworks']['user']
   cb_group node['hopsworks']['group']
   action :generate
 end
 
-kagent_keys "#{homedir}" do
+kagent_keys "#{hopsworks_user_home}" do
   cb_user node['hopsworks']['user']
   cb_group node['hopsworks']['group']
   cb_name "hopsworks"
@@ -1306,4 +1267,13 @@ if node['rstudio']['enabled'].eql? "true"
       systemctl disable rstudio-server
     EOF
   end
+end
+
+# Alter table flyway_schema_history to use ndb instead of innodb
+bash 'alter_flyway_schema_history_engine' do
+  user "root"
+  code <<-EOF
+    set -e
+    #{exec} -e \"ALTER TABLE #{node['hopsworks']['db']}.flyway_schema_history engine = 'ndb';\"
+  EOF
 end
